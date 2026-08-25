@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <PreferenceCategory android:title="通用">
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="@string/key_always_true_answer"
+            android:summary="手写输入识别结果永远为正确答案"
+            android:title="一切输入视为正确答案" />
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="@string/key_double_nickname_length"
+            android:title="双倍昵称长度" />
+        <SwitchPreference
+            android:defaultValue="false"
+            android:title="解除昵称字符限制"
+            android:key="@string/key_remove_restriction_on_nickname"
+            android:summary="开启后，昵称可以使用任意非空白字符" />
+    </PreferenceCategory>
+    <PreferenceCategory android:title="练习">
+        <SwitchPreference
+            android:defaultValue="false"
+            android:key="@string/key_auto_honor"
+            android:title="自动上分"
+            android:disableDependentsState="true"
+            android:summary="进入任意口算练习页面挂机即可"/>
+        <SwitchPreference
+            android:defaultValue="true"
+            android:key="@string/key_auto_practice"
+            android:dependency="@string/key_auto_honor"
+            android:title="练习场自动答题" />
+        <SwitchPreference
+            android:defaultValue="false"
+            android:dependency="@string/key_auto_practice"
+            android:key="@string/key_auto_practice_quick"
+            android:title="极速答题" />
+        <SwitchPreference
+            android:defaultValue="false"
+            android:dependency="@string/key_auto_practice"
+            android:key="@string/key_auto_practice_cyclic"
+            android:title="循环练习" />
+        <EditTextPreference
+            android:defaultValue="1500"
+            android:dependency="@string/key_auto_practice_cyclic"
+            android:key="@string/key_auto_practice_cyclic_interval"
+            android:inputType="number"
+            android:hint="单位毫秒，默认值1500"
+            android:title="循环时间间隔" />
+    </PreferenceCategory>
+    <PreferenceCategory android:title="PK">
+        <ListPreference
+            android:defaultValue="0"
+            android:dialogTitle="请选择"
+            android:entries="@array/auto_answer_config"
+            android:entryValues="@array/auto_answer_config_values"
+            android:key="@string/key_auto_answer_config"
+            android:title="自动答题配置" />
+        <EditTextPreference
+            android:enabled="false"
+            android:hint="请输入自定义的js代码"
+            android:key="@string/key_custom_answer_config"
+            android:summary="请确保代码能正确运行"
+            android:title="自定义答题" />
+        <SwitchPreference
+            android:title="极速模式稳赢"
+            android:key="@string/key_quick_mode_must_win"
+            android:defaultValue="false" />
+        <EditTextPreference
+            android:defaultValue="200"
+            android:enabled="false"
+            android:hint="单位毫秒，默认值200"
+            android:inputType="number"
+            android:key="@string/key_quick_mode_interval"
+            android:title="极速模式模拟答题间隔" />
+        <SwitchPreference
+            android:key="@string/key_pk_cyclic"
+            android:title="循环PK"
+            android:defaultValue="false"/>
+        <EditTextPreference
+            android:key="@string/key_pk_cyclic_interval"
+            android:defaultValue="1500"
+            android:dependency="@string/key_pk_cyclic"
+            android:title="循环时间间隔"
+            android:inputType="number"
+            android:hint="单位毫秒，默认值1500" />
+    </PreferenceCategory>
+    <PreferenceCategory android:title="Debug">
+        <SwitchPreference
+            android:key="@string/key_debug"
+            android:title="DEBUG"
+            android:summary="没事别开"/>
+    </PreferenceCategory>
+    <PreferenceCategory android:title="关于">
+        <Preference
+            android:key="@string/key_github"
+            android:title="Github" />
+        <Preference
+            android:key="@string/key_version"
+            android:title="版本" />
+    </PreferenceCategory>
+</PreferenceScreen>

@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths-ignore:
+      - '**/*.md'
+      - '.editorconfig'
+      - '.gitignore'
+      - '.github/**'
+  pull_request:
+    branches:
+      - main
+      - master
+    paths-ignore:
+      - '**/*.md'
+      - '.editorconfig'
+      - '.gitignore'
+      - '.github/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---- Job 1: 代码质量门禁（独立、快速）----
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Lint
+        run: ./gradlew lint --no-daemon
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-debug.html
+          if-no-files-found: warn
+
+  # ---- Job 2: 未签名 Release 构建（PR/手动预览用）----
+  build:
+    name: Build (unsigned)
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      # 未签名构建：CI 无 keystore，signingConfig 回退到 debug 签名（见 app/build.gradle.kts）
+      - name: Build release (unsigned)
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Collect APKs + ABI check + mapping
+        run: |
+          set -euo pipefail
+          mkdir -p dist/apk dist/mapping
+
+          for apk in app/build/outputs/apk/release/*.apk; do
+            test -f "$apk"
+            echo "::group::$apk"
+            echo "ABIs:"
+            unzip -Z1 "$apk" 'lib/*/*.so' | cut -d/ -f2 | sort -u
+            echo "::endgroup::"
+            cp -v "$apk" dist/apk/
+          done
+
+          # 收集混淆映射（release 已开 minify）
+          find app/build/outputs/mapping -name mapping.txt -exec cp -v {} dist/mapping/ \; || true
+
+          echo "Collected APKs:"; ls -1 dist/apk
+          echo "Collected mappings:"; ls -1 dist/mapping || echo "(none)"
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: 老挂戏老叟-unsigned
+          path: dist/apk/*.apk
+
+      - name: Upload obfuscation mapping
+        uses: actions/upload-artifact@v4
+        with:
+          name: obfuscation-mapping
+          path: dist/mapping/*.txt

@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">老挂戏老叟</string>
+    <string name="app_description">老挂戏老叟 - 小猿口算 LSPosed 模块</string>
+    <string name="key_always_true_answer">always_true_answer</string>
+    <string name="key_auto_honor">auto_honor</string>
+    <string name="key_auto_practice">auto_practice</string>
+    <string name="key_auto_practice_quick">auto_practice_quick</string>
+    <string name="key_auto_practice_cyclic">auto_practice_cyclic</string>
+    <string name="key_auto_practice_cyclic_interval">auto_practice_cyclic_interval</string>
+    <string name="key_auto_answer_config">auto_answer_config</string>
+    <string name="key_custom_answer_config">custom_answer_config</string>
+    <string name="key_quick_mode_must_win">quick_mode_must_win</string>
+    <string name="key_quick_mode_interval">quick_mode_interval</string>
+    <string name="key_pk_cyclic">pk_cyclic</string>
+    <string name="key_pk_cyclic_interval">pk_cyclic_interval</string>
+    <string name="key_github">github</string>
+    <string name="key_version">version</string>
+    <string name="key_goto_settings">goto_settings</string>
+    <string name="key_debug">debug</string>
+    <string name="key_double_nickname_length">double_nickname_length</string>
+    <string name="key_remove_restriction_on_nickname">remove_restriction_on_nickname</string>
+</resources>

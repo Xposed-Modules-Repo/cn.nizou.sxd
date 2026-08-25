@@ -1,0 +1,183 @@
+package cn.nizou.sxd.hook
+
+import android.app.Activity
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.os.Bundle
+import android.view.View
+import android.widget.LinearLayout
+import android.widget.LinearLayout.LayoutParams
+import android.widget.TextView
+import cn.nizou.sxd.Classname
+import cn.nizou.sxd.HOST_PACKAGE_NAME
+import cn.nizou.sxd.KEY_START_SETTINGS
+import cn.nizou.sxd.api.LegacyApiService
+import cn.nizou.sxd.api.OralApiService
+import cn.nizou.sxd.ui.host.HostComposePanel
+import cn.nizou.sxd.util.XposedHelpers
+import cn.nizou.sxd.util.logI
+import io.github.libxposed.api.XposedInterface
+import io.github.libxposed.api.XposedInterface.HookHandle
+import java.lang.reflect.Constructor
+
+class SettingHook(
+    self: XposedInterface,
+    classLoader: ClassLoader
+) : BaseHook(self, classLoader) {
+
+    override val name: String
+        get() = "SettingHook"
+
+    private var shouldStartSettings = false
+
+    override fun startHook() {
+        hookSettingActivity()
+        hookRouterActivity()
+        hookHomeActivity()
+    }
+
+    private fun hookRouterActivity() {
+        val routerActivityClass = findClass(Classname.ROUTER_ACTIVITY)
+        routerActivityClass.findMethod("onCreate", Bundle::class.java)
+            .intercept("router_onCreate") { chain ->
+                val r = chain.proceed()
+                val activity = chain.thisObject as Activity
+                val intent = activity.intent
+                if (intent != null) {
+                    shouldStartSettings = intent.getBooleanExtra(KEY_START_SETTINGS, false)
+                }
+                r
+            }
+    }
+
+    private fun hookHomeActivity() {
+        val homeActivityClass = findClass(Classname.HOME_ACTIVITY)
+        homeActivityClass.findMethod("onResume").intercept("home_onResume_settings") { chain ->
+            val r = chain.proceed()
+            if (shouldStartSettings) {
+                val context = chain.thisObject as Context
+                val intent = Intent().apply {
+                    component = ComponentName(HOST_PACKAGE_NAME, Classname.SETTINGS_ACTIVITY)
+                }
+                context.startActivity(intent)
+            }
+            r
+        }
+
+        val apiServiceCompanionClass = findClass("${Classname.ORAL_API_SERVICE}\$a")
+        val legacyApiServiceCompanionClass = findClass("${Classname.LEGACY_API_SERVICE}\$a")
+        val gsonClass = findClass(Classname.GSON)
+        var handle: HookHandle? = null
+        handle = homeActivityClass.findMethod("onResume").intercept("home_onResume_initApi") { chain ->
+            val r = chain.proceed()
+            runCatching {
+                val apiServiceCompanion =
+                    XposedHelpers.getStaticObjectField(apiServiceCompanionClass, "a")
+                val apiService = XposedHelpers.callMethod(apiServiceCompanion, "a")!!
+                OralApiService.init(apiService)
+                val legacyApiServiceCompanion =
+                    XposedHelpers.getStaticObjectField(legacyApiServiceCompanionClass, "a")
+                val legacyApiService = XposedHelpers.callMethod(legacyApiServiceCompanion, "a")!!
+                val gson = gsonClass.getDeclaredConstructor().newInstance()
+                LegacyApiService.init(legacyApiService, gson)
+            }.onFailure {
+                logI(it)
+            }
+            handle?.unhook()
+            r
+        }
+    }
+
+    private fun hookSettingActivity() {
+        val lifecycleOwnerKtClass = findClass(Classname.LIFECYCLE_OWNER_KT)
+        val settingsActivityClass = findClass(Classname.SETTINGS_ACTIVITY)
+        val sectionItemClass = findClass(Classname.SECTION_ITEM)
+        val sectionItemConstructor = sectionItemClass.getConstructor(Context::class.java)
+        settingsActivityClass.findMethod("onCreate", Bundle::class.java)
+            .intercept("settings_onCreate") { chain ->
+                val r = chain.proceed()
+                val activity = chain.thisObject as Activity
+                val scope =
+                    XposedHelpers.callStaticMethod(lifecycleOwnerKtClass, "getLifecycleScope", activity)
+                val coroutineContext = XposedHelpers.callMethod(scope, "getCoroutineContext")
+                LegacyApiService.setup(coroutineContext!!)
+
+                addSectionItems(activity, sectionItemConstructor)
+                r
+            }
+
+        settingsActivityClass.findMethod("onResume").intercept("settings_onResume") { chain ->
+            val r = chain.proceed()
+            if (shouldStartSettings) {
+                shouldStartSettings = false
+                showSettingsPanel(chain.thisObject as Context)
+            }
+            r
+        }
+    }
+
+    private fun showSettingsPanel(context: Context) {
+        if (context is Activity) {
+            HostComposePanel.showSettings(context)
+        }
+    }
+
+    private fun addSectionItems(activity: Activity, sectionItemConstructor: Constructor<*>) {
+        val appWidgetId = activity.resources.getIdentifier(
+            "cell_appwidget",
+            "id",
+            activity.packageName
+        )
+        val appWidget = activity.findViewById<View>(appWidgetId)
+        val container = appWidget.parent as LinearLayout
+        val labelId =
+            activity.resources.getIdentifier("text_label", "id", activity.packageName)
+
+        val customScoreSectionItem =
+            buildCustomScoreSectionItem(activity, sectionItemConstructor, labelId)
+        container.addView(customScoreSectionItem, 0)
+        val moduleSectionItem = buildModuleSectionItem(activity, sectionItemConstructor, labelId)
+        container.addView(moduleSectionItem, 0)
+    }
+
+    private fun buildModuleSectionItem(
+        activity: Activity,
+        itemConstructor: Constructor<*>,
+        labelId: Int
+    ): View {
+        val item = itemConstructor.newInstance(activity) as View
+        return buildSectionItem(item, labelId, "口算糕手设置") {
+            HostComposePanel.showSettings(activity)
+        }
+    }
+
+    private fun buildSectionItem(
+        item: View,
+        labelId: Int,
+        label: String,
+        onClick: (() -> Unit)? = null
+    ): View {
+        val labelTv = item.findViewById<TextView>(labelId)
+        labelTv.text = label
+        item.layoutParams = LayoutParams(
+            LayoutParams.MATCH_PARENT,
+            LayoutParams.WRAP_CONTENT
+        )
+        onClick?.let {
+            item.setOnClickListener { onClick() }
+        }
+        return item
+    }
+
+    private fun buildCustomScoreSectionItem(
+        activity: Activity,
+        itemConstructor: Constructor<*>,
+        labelId: Int
+    ): View {
+        val item = itemConstructor.newInstance(activity) as View
+        return buildSectionItem(item, labelId, "自定义分数") {
+            HostComposePanel.showCustomScore(activity)
+        }
+    }
+}

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="auto_answer_config">
+        <item>停用</item>
+        <item>自定义</item>
+        <item>标准</item>
+        <item>极速</item>
+    </string-array>
+    <string-array name="auto_answer_config_values">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+    </string-array>
+</resources>

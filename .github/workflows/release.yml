@@ -1,0 +1,176 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: "Publish as draft (仅 tag 正式发布时忽略)"
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v*'          # tag 触发正式发布
+
+permissions:
+  contents: write     # 发布 Job 需要写 Release
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build_signed:
+    name: Build signed APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # 供 update.json 用 git 版本信息
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      # ---- 签名：keystore 解码到 RUNNER_TEMP 隔离，密钥走环境变量 ----
+      - name: Decode keystore (RUNNER_TEMP isolated)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/keystore.jks"
+          # app/build.gradle.kts 读取 ../keystore.jks（仓库根）—— 软链到 RUNNER_TEMP，keystore 本体不入工作区
+          ln -sf "$RUNNER_TEMP/keystore.jks" ./keystore.jks
+
+      - name: Build signed release APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Collect APKs + ABI check + mapping
+        run: |
+          set -euo pipefail
+          mkdir -p dist/apk dist/mapping
+
+          # 本模块 universal APK 应包含全部 4 个 ABI（arm64-v8a/armeabi-v7a/x86/x86_64）
+          expected_abis="arm64-v8a armeabi-v7a x86 x86_64"
+
+          for apk in app/build/outputs/apk/release/*.apk; do
+            test -f "$apk"
+
+            actual_abis=$(unzip -Z1 "$apk" 'lib/*/*.so' | cut -d/ -f2 | sort -u | tr '\n' ' ' | sed 's/ $//')
+            echo "APK: $apk"
+            echo "Expected ABIs: $expected_abis"
+            echo "Actual ABIs:   ${actual_abis:-<none>}"
+
+            if [ "$actual_abis" != "$expected_abis" ]; then
+              echo "::error file=$apk::ABI mismatch. Expected [$expected_abis], got [$actual_abis]"
+              exit 1
+            fi
+
+            cp -v "$apk" dist/apk/
+          done
+
+          # 收集混淆映射（release 已开 minify）
+          find app/build/outputs/mapping -name mapping.txt -exec cp -v {} dist/mapping/ \; || true
+
+          echo "Collected APKs:"; ls -1 dist/apk
+          echo "Collected mappings:"; ls -1 dist/mapping || echo "(none)"
+
+      - name: Upload signed APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: 老挂戏老叟-signed
+          path: dist/apk/*.apk
+
+      - name: Upload obfuscation mapping
+        uses: actions/upload-artifact@v4
+        with:
+          name: obfuscation-mapping
+          path: dist/mapping/*.txt
+
+  release:
+    name: Publish Release
+    needs: build_signed
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download signed APKs
+        uses: actions/download-artifact@v4
+        with:
+          name: 老挂戏老叟-signed
+          path: artifacts
+
+      - name: Download obfuscation mapping
+        uses: actions/download-artifact@v4
+        with:
+          name: obfuscation-mapping
+          path: artifacts/mapping
+        continue-on-error: true
+
+      # ---- 生成 update.json（供应用内更新器；包名 cn.nizou.sxd / 应用名 老挂戏老叟）----
+      - name: Generate update.json
+        run: |
+          GIT_HASH=$(git rev-parse --short HEAD)
+          VERSION_NAME=$(grep -o 'versionName[[:space:]]*=[[:space:]]*"[^"]*"' app/build.gradle.kts | head -1 | sed -E 's/.*"([^"]*)"/\1/')
+          VERSION_CODE=$(grep -o 'versionCode[[:space:]]*=[[:space:]]*[0-9]*' app/build.gradle.kts | head -1 | grep -o '[0-9]*')
+
+          cat > artifacts/update.json <<EOF
+          {
+            "package": "cn.nizou.sxd",
+            "name": "老挂戏老叟",
+            "versionName": "${VERSION_NAME}",
+            "versionCode": ${VERSION_CODE},
+            "commit": "${GIT_HASH}"
+          }
+          EOF
+
+          echo "Generated update.json:"; cat artifacts/update.json
+
+      # 合并下载的产物
+      - name: Collect release assets
+        run: |
+          set -euo pipefail
+          mkdir -p assets
+          cp -v artifacts/*.apk assets/ 2>/dev/null || true
+          cp -v artifacts/update.json assets/
+          cp -v artifacts/mapping/*.txt assets/ 2>/dev/null || true
+          echo "Assets:"; ls -1 assets
+
+      # ---- tag 触发 → 正式 Release；手动 → 滚动 CI Release ----
+      - name: Publish (tag release)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 老挂戏老叟 ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          files: assets/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish (rolling CI release)
+        if: github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete CI --yes || true
+          gh api -X DELETE repos/${{ github.repository }}/git/refs/tags/CI || true
+          gh release create CI \
+            --title "老挂戏老叟 CI" \
+            --prerelease \
+            --notes "最新 CI 构建产物（commit ${{ github.sha }}）。应用内更新器通过 update.json 读取。" \
+            assets/* || true
