@@ -31,7 +31,7 @@ object XposedHelpers {
         return fieldOf(o.javaClass, name).also { it.isAccessible = true }.get(o)
     }
 
-    fun getStaticObjectField(clazz: Class<*>, name: String): Any =
+    fun getStaticObjectField(clazz: Class<*>, name: String): Any? =
         clazz.getDeclaredField(name).also { it.isAccessible = true }.get(null)
 
     fun setObjectField(obj: Any?, name: String, value: Any?) {
@@ -66,7 +66,7 @@ object XposedHelpers {
         return methodOf(o.javaClass, name, args).also { it.isAccessible = true }.invoke(o, *args)
     }
 
-    fun callStaticMethod(clazz: Class<*>, name: String, vararg args: Any?): Any =
+    fun callStaticMethod(clazz: Class<*>, name: String, vararg args: Any?): Any? =
         methodOf(clazz, name, args).also { it.isAccessible = true }.invoke(null, *args)
 
     // ---- 内部 ----

@@ -49,6 +49,7 @@ class XposedInit : XposedModule() {
     }
 
     @SuppressLint("DiscouragedApi")
+    @Suppress("DEPRECATION")
     private fun createModuleResources(apkPath: String): Resources {
         // AssetManager() 构造在 compileSdk 34 下被隐藏（package-private），改经反射创建。
         val am = AssetManager::class.java.getDeclaredConstructor()
