@@ -1,6 +1,7 @@
 package cn.nizou.sxd.util
 
 import android.content.res.Resources
+import cn.nizou.sxd.BuildConfig
 import cn.nizou.sxd.R
 import cn.nizou.sxd.XposedInit
 
@@ -26,7 +27,7 @@ class StringRes(private val resources: Resources) {
 
     /** 按 key 字符串取同名 R.string 的值（供 SettingsPrefs 通用读写） */
     fun keyValue(name: String): String = resources.getString(
-        resources.getIdentifier(name, "string", R::class.java.packageName)
+        resources.getIdentifier(name, "string", BuildConfig.APPLICATION_ID)
     )
 }
 
