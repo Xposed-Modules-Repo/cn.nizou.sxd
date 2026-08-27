@@ -1,37 +1,40 @@
 package cn.nizou.sxd.util
 
-import android.content.Context
-import cn.nizou.sxd.HOST_PACKAGE_NAME
+import android.content.SharedPreferences
 
 /**
- * 激活状态检测（照抄 WeKit `utils/hook_status/HookStatus.kt` 的意图，做适配简化）。
+ * 激活状态检测（跨进程，基于 libxposed Remote Preferences）。
  *
- * 原版用 `io.github.libxposed.service.XposedService` 查宿主是否在 scope。但本项目 pinned 的
- * libxposed **102.0.0** 的 api 工件里并不含 `io.github.libxposed.service.*`（WeKit 是自备
- * compileOnly 桩，且只能在模块自身进程读到服务连接）。对「注入宿主面板」这一真实使用场景，
- * 模块代码既然已经在 `com.fenbi.android.leo` 进程里运行，本身就证明已激活，无需查 service。
- * 因此这里用「是否运行在宿主进程」作为最可靠信号；模块自身进程以框架是否加载本模块兜底。
+ * 背景：旧实现用「运行在宿主进程」或 `frameworkLoaded`（onModuleLoaded 置位）判激活，
+ * 但独立打开模块设置页进程时该回调不触发、context 又是模块进程，导致设置页永远显示
+ * "未激活"（真机复现，见 记忆/01 第 9 轮遗留）。
  *
- * 验证依赖：真机 LSPosed 运行时按需补充 service 桩。
+ * 方案：宿主 `com.fenbi.android.leo` 进程在 `onPackageReady` 里 hook 成功后，用
+ * `XposedModule.getRemotePreferences(MODULE_PREFS_NAME)` 写入 `hook_active=true`。
+ * RemotePreferences 由框架跨进程同步，模块设置页进程（也被 LSPosed 注入）读取同一份，
+ * 从而正确反映「模块是否已成功注入宿主」。
  */
 object HookStatus {
+    private const val KEY_HOOK_ACTIVE = "hook_active"
 
-    /** 框架是否在 `onModuleLoaded` 时加载了本模块（模块自身进程兜底信号）。 */
-    @Volatile
-    var frameworkLoaded: Boolean = false
-        private set
-
-    fun markFrameworkLoaded() {
-        frameworkLoaded = true
+    /** 宿主进程 hook 成功后调用，标记激活（写入跨进程 RemotePreferences）。 */
+    fun markActive(prefsRemote: SharedPreferences) {
+        prefsRemote.edit().putBoolean(KEY_HOOK_ACTIVE, true).apply()
     }
 
     /**
-     * 是否已激活（能 hook 到宿主）。
-     * - 宿主进程：模块已注入宿主 => 必然已激活。
-     * - 模块自身进程：以框架是否加载本模块为准。
+     * 模块设置页进程调用：用模块自身的 RemotePreferences 读取标记。
+     * @param prefsRemote 模块进程的 RemotePreferences；为 null 时回退到本进程静态标记。
      */
-    fun isActivated(context: Context): Boolean {
-        if (context.packageName == HOST_PACKAGE_NAME) return true
-        return frameworkLoaded
+    fun isActivated(prefsRemote: SharedPreferences?): Boolean =
+        prefsRemote?.getBoolean(KEY_HOOK_ACTIVE, false) ?: localActive
+
+    /** 本进程静态标记（onModuleLoaded 时置位，作 RemotePreferences 不可用时的兜底）。 */
+    @Volatile
+    var localActive: Boolean = false
+        private set
+
+    fun markLocalActive() {
+        localActive = true
     }
 }

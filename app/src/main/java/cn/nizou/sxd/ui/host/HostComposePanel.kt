@@ -1,97 +1,156 @@
 package cn.nizou.sxd.ui.host
 
 import android.app.Activity
-import android.view.ViewGroup
-import android.widget.FrameLayout
-import androidx.compose.material3.Surface
+import android.content.res.Configuration
+import android.graphics.Color
+import android.os.Build
+import android.view.Gravity
+import android.view.Window
+import android.view.WindowManager
+import androidx.activity.ComponentDialog
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
+import androidx.core.graphics.drawable.toDrawable
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import cn.nizou.sxd.XposedInit
-import cn.nizou.sxd.ui.settings.CustomScoreScreen
-import cn.nizou.sxd.ui.settings.SettingsScreen
 import cn.nizou.sxd.ui.theme.AutoOralTheme
 import cn.nizou.sxd.util.StringRes
 
 /**
- * 宿主注入面板。
+ * 宿主注入面板（对齐 WeKit `showPanelDialog`：底部弹出 + 点外关闭）。
  *
- * 崩溃根因修复：宿主 Activity 的 context 的 classLoader 是**宿主** classLoader，没有 Compose 类，
- * 直接 `new ComposeView(activity)` 会 NoClassDefFound → 闪退。这里用 [ModuleContextWrapper]
- * 包装 context：getClassLoader() 返回**模块** classLoader（含模块打包的 Compose 运行库），
- * 并把模块资源注入其 Resources；ComposeView 用该包装 context 创建。生命周期经
- * [LifecycleProvider] 转发宿主 Activity 事件。
+ * 崩溃根因修复（问题 1「注入菜单打不开」）：旧实现把 `ComposeView` 直接 addView 到宿主
+ * SettingsActivity 的 decorView 上，Compose 在 onAttachedToWindow 时从 view 树向上找
+ * `ViewTreeLifecycleOwner`，而宿主 DecorView 上没有 —— 抛
+ * `IllegalStateException: ViewTreeLifecycleOwner not found from DecorView[SettingsActivity]`，
+ * 宿主崩溃（真机已复现）。
  *
- * 方案：在宿主 SettingsActivity 的 decorView 上叠加一个全屏 ComposeView 覆盖层，渲染模块的
- * Compose 设置页。关闭即从视图树移除并销毁 owner。
+ * 修复：改用 **ComponentDialog**（androidx.activity）开一个**独立 window** 承载 Compose。
+ * ComponentDialog 自身即 LifecycleOwner，ComposeView 在独立 window 里能正常解析 composition
+ * context，不再依赖宿主 DecorView 的 lifecycle。这是 wekit 注入微信 Compose 面板的成熟做法。
+ *
+ * 本版再把 window 对齐 WeKit `showPanelDialog`：
+ *  - gravity = BOTTOM（从底部弹出）；
+ *  - 透明背景 + FLAG_DIM_BEHIND(0.3) 压暗宿主；
+ *  - 内容区占窗口下 65% 高度，外层 Box 点空白即关闭（内容区自身拦截点击）。
  */
 class HostComposePanel private constructor(
-    private val activity: Activity,
-    private val owner: XposedLifecycleOwner,
-    private val composeView: ComposeView
+    private val dialog: ComponentDialog
 ) {
-    var onBack: (() -> Unit)? = null
-
-    fun show() {
-        val decor = activity.window.decorView as ViewGroup
-        composeView.layoutParams = FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        )
-        decor.addView(composeView)
-    }
+    fun show() = dialog.show()
 
     fun dismiss() {
-        val decor = activity.window.decorView as ViewGroup
-        runCatching { decor.removeView(composeView) }
-        // owner 生命周期交给 LifecycleProvider 转发；这里仅触发销毁（若宿主已销毁则幂等）。
-        runCatching { owner.onDestroy() }
+        runCatching { dialog.dismiss() }
     }
 
     companion object {
-        /** 在宿主 Activity 的 decorView 上叠加一个全屏 Compose 设置面板。 */
+        /** 在宿主 SettingsActivity 底部弹出 Compose 设置面板（独立 window）。 */
         fun showSettings(activity: Activity): HostComposePanel =
-            showPanel(activity) { onBack ->
-                SettingsScreen(
+            showPanel(activity) { onDismiss ->
+                SettingsPanel(
                     res = StringRes(XposedInit.moduleRes),
-                    onBack = onBack
+                    onDismiss = onDismiss
                 )
-            }
-
-        /** 在宿主 Activity 的 decorView 上叠加一个全屏 Compose 自定义分数面板。 */
-        fun showCustomScore(activity: Activity): HostComposePanel =
-            showPanel(activity) { onBack ->
-                CustomScoreScreen(onBack = onBack)
             }
 
         private fun showPanel(
             activity: Activity,
-            content: @Composable (onBack: () -> Unit) -> Unit
+            content: @Composable (onDismiss: () -> Unit) -> Unit
         ): HostComposePanel {
-            val owner = XposedLifecycleOwner.forActivity(activity)
-            val backRef = mutableStateOf<(() -> Unit)?>(null)
-            // 关键修复：用模块 classLoader context 创建 ComposeView，避免宿主无 Compose 类闪退。
+            // 模块 classLoader context：让宿主进程内能加载模块打包的 Compose 运行库与模块资源。
             val moduleContext = ModuleContextWrapper.wrap(activity)
+            val isDark =
+                (moduleContext.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                    Configuration.UI_MODE_NIGHT_YES
+
+            val dialog = ComponentDialog(
+                moduleContext,
+                android.R.style.Theme_Translucent_NoTitleBar
+            )
+            dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+            dialog.window?.apply {
+                setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
+                addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+                clearFlags(
+                    WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS or
+                        WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION,
+                )
+                WindowCompat.setDecorFitsSystemWindows(this, false)
+                statusBarColor = Color.TRANSPARENT
+                navigationBarColor = Color.TRANSPARENT
+                navigationBarDividerColor = Color.TRANSPARENT
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    isStatusBarContrastEnforced = false
+                    isNavigationBarContrastEnforced = false
+                }
+                WindowInsetsControllerCompat(this, decorView).apply {
+                    isAppearanceLightStatusBars = !isDark
+                    isAppearanceLightNavigationBars = !isDark
+                }
+                addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                setDimAmount(0.3f)
+                setSoftInputMode(
+                    WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+                        WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN,
+                )
+                attributes = attributes.apply { gravity = Gravity.BOTTOM }
+            }
+            dialog.setCancelable(true)
+
+            // ComponentDialog 自身即 LifecycleOwner + SavedStateRegistryOwner，ComposeView 用它即可正常重组。
             val composeView = ComposeView(moduleContext).apply {
-                setViewTreeLifecycleOwner(owner)
-                setViewTreeViewModelStoreOwner(owner)
-                setViewTreeSavedStateRegistryOwner(owner)
+                setViewTreeLifecycleOwner(dialog)
+                setViewTreeSavedStateRegistryOwner(dialog)
                 setContent {
                     AutoOralTheme {
-                        Surface(modifier = Modifier) {
-                            content { backRef.value?.invoke() }
+                        // showPanelDialog 式：全屏点外关闭；内容区占下 65% 高，内部拦截点击避免误关。
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .imePadding()
+                                .clickable(
+                                    indication = null,
+                                    interactionSource = null,
+                                    onClick = { dialog.dismiss() },
+                                ),
+                            contentAlignment = Alignment.BottomCenter,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .fillMaxHeight(0.65f)
+                                    .clickable(
+                                        indication = null,
+                                        interactionSource = null,
+                                        onClick = {},
+                                    ),
+                            ) {
+                                content { dialog.dismiss() }
+                            }
                         }
                     }
                 }
             }
-            val panel = HostComposePanel(activity, owner, composeView)
-            backRef.value = { panel.dismiss() }
-            panel.onBack = { panel.dismiss() }
-            panel.show()
+            dialog.setContentView(composeView)
+            dialog.window?.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
+
+            val panel = HostComposePanel(dialog)
+            panel.show() // 立即显示，否则点了没反应
+            dialog.window?.setLayout(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+            )
             return panel
         }
     }

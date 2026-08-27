@@ -1,25 +1,32 @@
 [versions]
-agp = "8.8.0-alpha07"
+agp = "9.3.1"
 libxposed = "102.0.0"
-kotlin = "2.0.0"
-# Compose —— compileSdk 34 兼容（Compose 1.6.x / material3 1.2.x）
-compose-bom = "2024.06.00"
-activity-compose = "1.9.2"
-core-ktx = "1.13.1"
-lifecycle-runtime-ktx = "2.8.4"
+kotlin = "2.4.10"
+# Compose —— wekit 同款（miuix-blur 0.9.4-rc01 要求 compileSdk 37 / Compose 1.12 / lifecycle 2.11 / AGP 9.1+）
+compose-bom = "2026.08.00"
+compose-material3 = "1.5.0-alpha26"
+activity = "1.13.0"
+androidx-core-ktx = "1.19.0"
+lifecycle-runtime = "2.11.0"
+# miuix —— LiquidGlass 悬浮底栏（照抄 wekit，wekit 同款 0.9.4-rc01）
+miuix = "0.9.4-rc01"
 
 [libraries]
 libxposed-api = { module = "io.github.libxposed:api", version.ref = "libxposed" }
-# --- Compose Material3 ---
+# --- Compose Material3（wekit 同款） ---
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
 androidx-compose-foundation = { module = "androidx.compose.foundation:foundation" }
 androidx-compose-ui = { module = "androidx.compose.ui:ui" }
-androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
-androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
-androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
-androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycle-runtime-ktx" }
+androidx-compose-material3 = { module = "androidx.compose.material3:material3", version.ref = "compose-material3" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core-ktx" }
+androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycle-runtime" }
 androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+# --- miuix (LiquidGlass 悬浮底栏) ---
+miuix-blur = { module = "top.yukonga.miuix.kmp:miuix-blur-android", version.ref = "miuix" }
+miuix-shader = { module = "top.yukonga.miuix.kmp:miuix-shader-android", version.ref = "miuix" }
+miuix-nav = { module = "top.yukonga.miuix.kmp:miuix-nav-android", version.ref = "miuix" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -1,6 +1,8 @@
 package cn.nizou.sxd.hook
 
 import cn.nizou.sxd.Classname
+import cn.nizou.sxd.util.Packet
+import cn.nizou.sxd.util.PacketTool
 import cn.nizou.sxd.util.Practice
 import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.logI
@@ -56,21 +58,38 @@ class RetrofitHook(
     private fun intercept(chain: Any): Any? {
         val request = XposedHelpers.callMethod(chain, "request")
         val httpUrl = XposedHelpers.callMethod(request, "url")
-        val method = XposedHelpers.callMethod(request, "method")
-        val pathSegments = XposedHelpers.callMethod(httpUrl, "pathSegments") as List<*>
-        val path = "/${pathSegments.take(4).joinToString("/") { it.toString() }}"
+        val method = XposedHelpers.callMethod(request, "method").toString()
+        val fullPath = XposedHelpers.callMethod(httpUrl, "encodedPath")?.toString() ?: "/"
 
-        if (!Practice.autoHonor || !path.startsWith("/leo-math/android/exams") || method !in arrayOf("POST", "PUT")) {
-            return XposedHelpers.callMethod(chain, "proceed", request)
+        // 1) 保持现有 isBackground 逻辑不破坏（自动上分）
+        var req = request
+        if (Practice.autoHonor && fullPath.startsWith("/leo-math/android/exams") && method in arrayOf("POST", "PUT")) {
+            req = buildIsBackground0(request)
         }
 
+        // 2) 通用抓包 / 改包（开关默认关；改包失败安全回落放行原请求）
+        if (Packet.capture || Packet.rewrite) {
+            req = PacketTool.processRequest(req, fullPath, method, classLoader, Packet.capture, Packet.writeFile)
+        }
+
+        // 3) proceed
+        val response = XposedHelpers.callMethod(chain, "proceed", req)
+
+        // 4) 响应抓包（capture 开启才用 peekBody 读，不消费真正的 body 流）
+        if (Packet.capture) {
+            PacketTool.captureResponse(response, fullPath, method, Packet.writeFile)
+        }
+        return response
+    }
+
+    /** 把 exams 请求 query 加 isBackground=0。 */
+    private fun buildIsBackground0(request: Any): Any {
         val url = XposedHelpers.callMethod(request, "url")
         val urlBuilder = XposedHelpers.callMethod(url, "newBuilder")
         XposedHelpers.callMethod(urlBuilder, "setQueryParameter", "isBackground", "0")
         val newUrl = XposedHelpers.callMethod(urlBuilder, "build")
         val newBuilder = XposedHelpers.callMethod(request, "newBuilder")
         XposedHelpers.callMethod(newBuilder, "url", newUrl)
-        val newRequest = XposedHelpers.callMethod(newBuilder, "build")
-        return XposedHelpers.callMethod(chain, "proceed", newRequest)
+        return XposedHelpers.callMethod(newBuilder, "build")
     }
 }

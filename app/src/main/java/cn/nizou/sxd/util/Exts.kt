@@ -16,6 +16,6 @@ fun Context.openSettingsInHostApp() {
 }
 
 fun Context.openGithub() {
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/TinyHai/AutoOralCalculation"))
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/sxd91/nizou"))
     startActivity(intent)
 }

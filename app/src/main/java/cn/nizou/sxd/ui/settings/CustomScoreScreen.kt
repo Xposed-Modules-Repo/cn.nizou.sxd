@@ -16,6 +16,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -30,29 +31,65 @@ import cn.nizou.sxd.util.logI
 import cn.nizou.sxd.util.mainHandler
 
 /**
+ * 当前分数加载状态机。
+ *
+ * 根因修复：LegacyApiService 只在宿主进程由 SettingHook.hookHomeActivity 的 init()+setup()
+ * 初始化；模块独立 App（模块本体）是**独立进程**，不注入宿主，apiService/coroutineContext
+ * 从未初始化 → 旧代码卡死在「加载中」。这里在调用前先用 [LegacyApiService.isReady] 探测：
+ * 未初始化（模块本体）→ 明确错误提示；已初始化（宿主注入面板）→ 正常拉取。
+ */
+private sealed interface ScoreLoadState {
+    /** 加载中（仅在宿主内、已初始化后短暂出现） */
+    data object Loading : ScoreLoadState
+
+    /** 模块本体独立运行：LegacyApiService 未初始化，无法读宿主分数 */
+    data object Uninitialized : ScoreLoadState
+
+    data class Success(val score: Int) : ScoreLoadState
+
+    data class Error(val message: String) : ScoreLoadState
+}
+
+/**
  * 自定义分数面板（替代旧 SettingHook.showCustomScoreDialog 的悬浮 AlertDialog）。
  * 逻辑与旧实现一致：读取当前分数 → 输入目标分数 → 提交刷分（postSavedExp）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomScoreScreen(onBack: () -> Unit) {
-    var currentScore by remember { mutableStateOf<Int?>(null) }
+    var loadState by remember { mutableStateOf<ScoreLoadState>(ScoreLoadState.Loading) }
     var target by remember { mutableStateOf("") }
     var suppose by remember { mutableStateOf<String?>(null) }
     var submitting by remember { mutableStateOf(false) }
 
+    val currentScore = (loadState as? ScoreLoadState.Success)?.score
+
     fun updateCurrentScore() {
+        if (!LegacyApiService.isReady()) {
+            // 模块本体独立运行：未注入宿主，无法初始化 LegacyApiService。
+            // 明确报错，而不是永久「加载中」。
+            loadState = ScoreLoadState.Uninitialized
+            return
+        }
+        loadState = ScoreLoadState.Loading
         LegacyApiService.getCurrentUserExp {
             it.onSuccess { data ->
                 val curWeekScore = XposedHelpers.getIntField(data, "curWeekScore")
                 logI("curWeekScore: $curWeekScore")
                 mainHandler.post {
-                    currentScore = curWeekScore
+                    loadState = ScoreLoadState.Success(curWeekScore)
                     suppose = null
                 }
-            }.onFailure { th -> logI(th) }
+            }.onFailure { th ->
+                logI(th)
+                mainHandler.post {
+                    loadState = ScoreLoadState.Error(th.message ?: th.toString())
+                }
+            }
         }
     }
+
+    LaunchedEffect(Unit) { updateCurrentScore() }
 
     Scaffold(
         topBar = {
@@ -75,9 +112,28 @@ fun CustomScoreScreen(onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "当前分数：${currentScore?.toString() ?: "加载中"}",
+                text = when (loadState) {
+                    ScoreLoadState.Loading -> "当前分数：加载中"
+                    ScoreLoadState.Uninitialized -> "当前分数：未初始化"
+                    is ScoreLoadState.Error -> "当前分数：读取失败"
+                    is ScoreLoadState.Success -> "当前分数：${loadState.score}"
+                },
                 style = MaterialTheme.typography.bodyLarge
             )
+            when (loadState) {
+                ScoreLoadState.Uninitialized -> Text(
+                    text = "当前为模块本体独立运行，未接入宿主 ApiService，无法读取分数。\n" +
+                        "请在小猿口算（宿主）内打开「老挂戏老叟设置」使用此功能。",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                is ScoreLoadState.Error -> Text(
+                    text = "读取分数失败：${loadState.message}",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                else -> Unit
+            }
             Text(
                 text = if (suppose != null) "预计目标分数：$suppose" else "预计目标分数：${currentScore?.toString() ?: "加载中"}",
                 style = MaterialTheme.typography.bodyLarge

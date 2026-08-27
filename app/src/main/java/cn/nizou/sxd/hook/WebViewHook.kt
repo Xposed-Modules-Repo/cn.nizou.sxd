@@ -289,8 +289,11 @@ class WebViewHook(
                             }
 
                             "resultPageJs" -> {
-                                XposedHelpers.setObjectField(arg0, "schemas", lastSchemas)
-                                XposedHelpers.setBooleanField(arg0, "close", true)
+                                // 防御：lastSchemas 未捕获（版本漂移/流程变化）时不再回放，放行原跳转避免 NPE
+                                if (lastSchemas != null) {
+                                    XposedHelpers.setObjectField(arg0, "schemas", lastSchemas)
+                                    XposedHelpers.setBooleanField(arg0, "close", true)
+                                }
                                 chain.proceed()
                             }
 

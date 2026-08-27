@@ -4,8 +4,10 @@ import android.annotation.SuppressLint
 import android.content.res.AssetManager
 import android.content.res.Resources
 import android.util.Log
+import cn.nizou.sxd.MODULE_PREFS_NAME
 import cn.nizou.sxd.hook.BaseHook
 import cn.nizou.sxd.util.HookStatus
+import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.install
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface
@@ -28,7 +30,7 @@ class XposedInit : XposedModule() {
         self = this
         modulePath = moduleApplicationInfo.sourceDir
         moduleRes = createModuleResources(modulePath)
-        HookStatus.markFrameworkLoaded()
+        HookStatus.markLocalActive()
         log(
             Log.INFO, "AutoOral",
             "event=module_loaded process=${param.processName} api=${apiVersion} framework=${frameworkName}"
@@ -47,7 +49,41 @@ class XposedInit : XposedModule() {
 
         install() // 加载 native libauto_oral（绝对路径）
 
-        BaseHook.startHook(this, param.classLoader)
+        // 跨进程激活标记：hook 成功后写入 RemotePreferences，供模块设置页读取（问题 3 修复）。
+        try {
+            HookStatus.markActive(getRemotePreferences(MODULE_PREFS_NAME))
+        } catch (_: Throwable) {
+        }
+
+        // 关键修复（问题 1）：onPackageReady 在宿主 classLoader 尚未完全就绪时即被触发
+        // （npatch/LSPosed 在 createOrUpdateClassLoaderLocked 期间调用），此时 findClass
+        // 宿主应用类会抛 ClassNotFoundException。故不在此同步 hook，改为 hook
+        // Application.attach —— 它在宿主应用 classLoader 完整创建后才执行，届时再 hook。
+        hookAfterAppAttach(param.classLoader)
+    }
+
+    private fun hookAfterAppAttach(appClassLoader: ClassLoader) {
+        try {
+            val appClass = XposedHelpers.findClass("android.app.Application", appClassLoader)
+            val attach = appClass.getDeclaredMethod("attach", android.content.Context::class.java)
+            attach.isAccessible = true
+            hook(attach).setId("app_attach").intercept { chain ->
+                val r = chain.proceed()
+                try {
+                    BaseHook.startHook(this, appClassLoader)
+                } catch (e: Throwable) {
+                    Log.e("AutoOral", "hook after attach failed", e)
+                }
+                r
+            }
+        } catch (e: Throwable) {
+            Log.e("AutoOral", "hookAfterAppAttach setup failed, fallback direct", e)
+            try {
+                BaseHook.startHook(this, appClassLoader)
+            } catch (e2: Throwable) {
+                Log.e("AutoOral", "fallback hook failed", e2)
+            }
+        }
     }
 
     @SuppressLint("DiscouragedApi")

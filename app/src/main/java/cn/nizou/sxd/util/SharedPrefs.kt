@@ -12,23 +12,27 @@ private val modulePrefs by lazy {
 
 /**
  * 供 Compose 设置 UI 持久化写入（新增，读仍走上方各 object 的 getter）。
- * 键一律来自 StringRes 的 key 常量，保证与 hook 侧读写同一份 prefs。
+ *
+ * 注意：调用方传入的 `key` 参数是 `res.KEY_XXX`，它本身**已经是** prefs 键字符串
+ * （如 "always_true_answer"，来自 `getString(R.string.key_always_true_answer)`）。
+ * 不要再套一层 `res.keyValue(key)` —— 那会用该值再去 getIdentifier 查同名资源，
+ * 而资源名是 `key_always_true_answer`（值才是 always_true_answer），查不到返回 0，
+ * getString(0) 抛 NotFoundException 导致点击子菜单闪退（真机已复现）。
+ * 因此这里直接用 `key` 作为 prefs 键。
  */
 object SettingsPrefs {
-    private fun key(res: StringRes, k: String) = res.keyValue(k)
-
     fun readBoolean(res: StringRes, key: String, def: Boolean): Boolean =
-        modulePrefs.getBoolean(res.keyValue(key), def)
+        modulePrefs.getBoolean(key, def)
 
     fun writeBoolean(res: StringRes, key: String, value: Boolean) {
-        modulePrefs.edit().putBoolean(res.keyValue(key), value).apply()
+        modulePrefs.edit().putBoolean(key, value).apply()
     }
 
     fun readString(res: StringRes, key: String, def: String): String =
-        modulePrefs.getString(res.keyValue(key), def) ?: def
+        modulePrefs.getString(key, def) ?: def
 
     fun writeString(res: StringRes, key: String, value: String) {
-        modulePrefs.edit().putString(res.keyValue(key), value).apply()
+        modulePrefs.edit().putString(key, value).apply()
     }
 }
 
@@ -105,6 +109,31 @@ object PK {
 object Debug {
     val debug
         get() = modulePrefs.getBoolean(moduleStringRes.KEY_DEBUG, false)
+}
+
+/**
+ * 抓包 / 改包开关（RetrofitHook 通用 Interceptor 用）。
+ * - [capture]：抓包开关（默认关），开启后把经过该 Retrofit 的请求/响应写入 LogBuffer（可选写文件）。
+ * - [rewrite]：改包开关（默认关），按 [rules] JSON 规则改请求 query/body；失败安全回落放行原请求。
+ * - [writeFile]：是否把抓包日志追加写 externalCacheDir/packet_capture.log。
+ * - [rules]：规则 JSON 数组，示例见 util/PacketTool.kt 头部注释。
+ */
+object Packet {
+    val capture get() = modulePrefs.getBoolean(moduleStringRes.KEY_PACKET_CAPTURE, false)
+    val rewrite get() = modulePrefs.getBoolean(moduleStringRes.KEY_PACKET_REWRITE, false)
+    val writeFile get() = modulePrefs.getBoolean(moduleStringRes.KEY_PACKET_WRITE_FILE, false)
+    val rules get() = modulePrefs.getString(moduleStringRes.KEY_REWRITE_RULES, "[]")!!
+}
+
+/**
+ * 屏蔽「外挂检测 / 大朋友（家长监督）检测」开关（默认关）。
+ * - [blockRisk]：开启后屏蔽命中外挂/风控/异常关键字弹窗（Dialog）与 H5 alert，见 hook/RiskDetectHook.kt。
+ * - [blockSupervision]：开启后强制隐藏家长监督视图（com.fenbi.android.leo.imgsearch.sdk.check.helper.SupervisionHelper）。
+ * 均仅在开关开启时生效，且 hook 内部 runCatching，失败不影响正常流程。
+ */
+object Risk {
+    val blockRisk get() = modulePrefs.getBoolean(moduleStringRes.KEY_BLOCK_RISK_DETECT, false)
+    val blockSupervision get() = modulePrefs.getBoolean(moduleStringRes.KEY_BLOCK_SUPERVISION, false)
 }
 
 /**

@@ -1,24 +1,19 @@
-import java.io.ByteArrayOutputStream
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.lsplugin.resopt)
 }
 
-fun String.execute(): String {
-    val byteOut = ByteArrayOutputStream()
-    project.exec {
-        commandLine = this@execute.split("\\s".toRegex())
-        standardOutput = byteOut
-    }
-    return String(byteOut.toByteArray()).trim()
-}
+fun gitShortHash(): String = providers.exec {
+    commandLine("git", "rev-parse", "--short=8", "HEAD")
+}.standardOutput.asText.get().trim()
 
 android {
     namespace = "cn.nizou.sxd"
-    compileSdk = 34
+    compileSdk = 37
 
     signingConfigs {
         val jks = file("../keystore.jks")
@@ -34,8 +29,8 @@ android {
 
     defaultConfig {
         applicationId = "cn.nizou.sxd"
-        minSdk = 27
-        targetSdk = 34
+        minSdk = 33
+        targetSdk = 37
         versionCode = 20
         versionName = "1.7.3"
 
@@ -50,13 +45,12 @@ android {
                 "proguard-rules.pro"
             )
             signingConfig = signingConfigs.findByName("release") ?: getByName("debug").signingConfig
-            versionNameSuffix = runCatching { "-${"git rev-parse --verify --short HEAD".execute()}" }
-                .getOrNull() ?: ""
+            versionNameSuffix = runCatching { "-${gitShortHash()}" }.getOrNull() ?: ""
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     androidResources {
@@ -78,9 +72,11 @@ android {
         buildConfig = true
         compose = true
     }
+}
 
-    kotlinOptions {
-        jvmTarget = "1.8"
+tasks.withType<KotlinCompile> {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 
@@ -97,4 +93,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     debugImplementation(libs.androidx.compose.ui.tooling)
     implementation(libs.androidx.compose.ui.tooling.preview)
+
+    // --- miuix (LiquidGlass 悬浮底栏，照抄 wekit 0.9.4-rc01) ---
+    implementation(libs.miuix.blur)
+    implementation(libs.miuix.shader)
+    implementation(libs.miuix.nav)
 }

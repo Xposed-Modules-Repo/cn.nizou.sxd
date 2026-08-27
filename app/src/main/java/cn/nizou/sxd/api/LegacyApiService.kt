@@ -36,6 +36,16 @@ object LegacyApiService {
         this.coroutineContext = coroutineContext
     }
 
+    /**
+     * 是否已由宿主 SettingHook 完成 init+setup。
+     * 模块独立 App（模块本体）是独立进程，不注入宿主，LegacyApiService 永远未初始化，
+     * 调用方据此给出明确错误而非卡「加载中」。
+     */
+    fun isReady(): Boolean =
+        ::apiService.isInitialized &&
+            ::coroutineContext.isInitialized &&
+            ::coroutineClass.isInitialized
+
     fun postSavedExp(exp: Int, onResult: (Result<Any>) -> Unit) {
         val postSavedExp = Proxy.newProxyInstance(
             coroutineClass.classLoader,

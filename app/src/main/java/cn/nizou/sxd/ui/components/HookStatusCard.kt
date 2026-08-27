@@ -19,26 +19,32 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import cn.nizou.sxd.HOST_PACKAGE_NAME
+import cn.nizou.sxd.MODULE_PREFS_NAME
+import cn.nizou.sxd.XposedInit
 import cn.nizou.sxd.util.HookStatus
 
 /**
  * 激活检测卡片（照抄 WeKit 独立模块首页的绿色「已激活」/红色「未激活」卡片）。
  *
- * - 绿色 `已激活`：模块已注入宿主 `com.fenbi.android.leo`（或框架已加载模块）。
- * - 红色 `未激活`：未检测到激活。
+ * - 绿色 `已激活`：模块已注入宿主 `com.fenbi.android.leo`（经跨进程 RemotePreferences 判定）。
+ * - 红色 `未激活`：未检测到激活（请确认 LSPosed 作用域已勾选小猿口算并重启）。
  */
 @Composable
 fun HookStatusCard(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val activated = HookStatus.isActivated(context)
+    // 模块进程的 RemotePreferences（经 self 获取）。onModuleLoaded 已置 self。
+    val prefsRemote = try {
+        XposedInit.self.getRemotePreferences(MODULE_PREFS_NAME)
+    } catch (_: Throwable) {
+        null
+    }
+    val activated = HookStatus.isActivated(prefsRemote)
 
     val containerColor = if (activated) Color(0xFF2E7D32) else Color(0xFFC62828)
     val title = if (activated) "已激活" else "未激活"
     val desc = when {
-        context.packageName == HOST_PACKAGE_NAME -> "模块已注入小猿口算，功能已生效"
-        HookStatus.frameworkLoaded -> "模块已作为 Xposed 模块加载"
-        else -> "请确认已在 LSPosed 作用域内勾选「小猿口算」"
+        activated -> "模块已注入小猿口算，功能已生效"
+        else -> "请确认已在 LSPosed 作用域内勾选「小猿口算」并重启"
     }
 
     Surface(

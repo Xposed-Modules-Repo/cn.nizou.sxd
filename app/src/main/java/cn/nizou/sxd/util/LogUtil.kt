@@ -18,5 +18,9 @@ fun logI(vararg infos: Any) {
         if (throwable != null) {
             Log.e(TAG, "", throwable)
         }
+        // 写入内存环形缓冲，供实时日志悬浮窗渲染
+        LogBuffer.add(
+            if (throwable != null) "${it} :: ${throwable.message}" else it.toString()
+        )
     }
 }

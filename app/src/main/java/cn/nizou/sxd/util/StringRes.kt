@@ -31,6 +31,12 @@ class StringRes(private val resources: Resources) {
     val KEY_CUSTOM_TITLE = resources.getString(R.string.key_custom_title)
     val KEY_PRACTICE_ANSWER = resources.getString(R.string.key_practice_answer)
     val KEY_VIP = resources.getString(R.string.key_vip)
+    val KEY_PACKET_CAPTURE = resources.getString(R.string.key_packet_capture)
+    val KEY_PACKET_REWRITE = resources.getString(R.string.key_packet_rewrite)
+    val KEY_PACKET_WRITE_FILE = resources.getString(R.string.key_packet_write_file)
+    val KEY_REWRITE_RULES = resources.getString(R.string.key_rewrite_rules)
+    val KEY_BLOCK_RISK_DETECT = resources.getString(R.string.key_block_risk_detect)
+    val KEY_BLOCK_SUPERVISION = resources.getString(R.string.key_block_supervision)
 
     /** 按 key 字符串取同名 R.string 的值（供 SettingsPrefs 通用读写） */
     fun keyValue(name: String): String = resources.getString(
