@@ -78,11 +78,10 @@ class RetrofitHook(
 
         // 4) 响应抓包（capture 开启才用 peekBody 读，不消费真正的 body 流）
         if (Packet.capture) {
-            PacketTool.captureResponse(response, fullPath, method, Packet.writeFile)
+            PacketTool.captureResponse(response!!, fullPath, method, Packet.writeFile)
         }
         return response
     }
-
     /** 把 exams 请求 query 加 isBackground=0。 */
     private fun buildIsBackground0(request: Any): Any {
         val url = XposedHelpers.callMethod(request, "url")!!
