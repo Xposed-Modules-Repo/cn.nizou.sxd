@@ -90,7 +90,7 @@ private fun moduleMenuEntries(): List<MenuEntry> = listOf(
 )
 
 @Composable
-private fun SettingsMainScreen(
+internal fun SettingsMainScreen(
     onNavigate: (SettingsRoute) -> Unit,
     onBack: () -> Unit
 ) {
