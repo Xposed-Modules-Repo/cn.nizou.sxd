@@ -112,15 +112,15 @@ fun CustomScoreScreen(onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = when (loadState) {
+                text = when (val s = loadState) {
                     ScoreLoadState.Loading -> "当前分数：加载中"
                     ScoreLoadState.Uninitialized -> "当前分数：未初始化"
                     is ScoreLoadState.Error -> "当前分数：读取失败"
-                    is ScoreLoadState.Success -> "当前分数：${loadState.score}"
+                    is ScoreLoadState.Success -> "当前分数：${s.score}"
                 },
                 style = MaterialTheme.typography.bodyLarge
             )
-            when (loadState) {
+            when (val s = loadState) {
                 ScoreLoadState.Uninitialized -> Text(
                     text = "当前为模块本体独立运行，未接入宿主 ApiService，无法读取分数。\n" +
                         "请在小猿口算（宿主）内打开「老挂戏老叟设置」使用此功能。",
@@ -128,7 +128,7 @@ fun CustomScoreScreen(onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium
                 )
                 is ScoreLoadState.Error -> Text(
-                    text = "读取分数失败：${loadState.message}",
+                    text = "读取分数失败：${s.message}",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyMedium
                 )

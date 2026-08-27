@@ -62,14 +62,15 @@ class RetrofitHook(
         val fullPath = XposedHelpers.callMethod(httpUrl, "encodedPath")?.toString() ?: "/"
 
         // 1) 保持现有 isBackground 逻辑不破坏（自动上分）
-        var req = request
+        var req: Any = request
         if (Practice.autoHonor && fullPath.startsWith("/leo-math/android/exams") && method in arrayOf("POST", "PUT")) {
             req = buildIsBackground0(request)
         }
 
         // 2) 通用抓包 / 改包（开关默认关；改包失败安全回落放行原请求）
         if (Packet.capture || Packet.rewrite) {
-            req = PacketTool.processRequest(req, fullPath, method, classLoader, Packet.capture, Packet.writeFile)
+            PacketTool.processRequest(req, fullPath, method, classLoader, Packet.capture, Packet.writeFile)
+                ?.let { req = it }
         }
 
         // 3) proceed
@@ -84,12 +85,12 @@ class RetrofitHook(
 
     /** 把 exams 请求 query 加 isBackground=0。 */
     private fun buildIsBackground0(request: Any): Any {
-        val url = XposedHelpers.callMethod(request, "url")
-        val urlBuilder = XposedHelpers.callMethod(url, "newBuilder")
+        val url = XposedHelpers.callMethod(request, "url")!!
+        val urlBuilder = XposedHelpers.callMethod(url, "newBuilder")!!
         XposedHelpers.callMethod(urlBuilder, "setQueryParameter", "isBackground", "0")
-        val newUrl = XposedHelpers.callMethod(urlBuilder, "build")
-        val newBuilder = XposedHelpers.callMethod(request, "newBuilder")
+        val newUrl = XposedHelpers.callMethod(urlBuilder, "build")!!
+        val newBuilder = XposedHelpers.callMethod(request, "newBuilder")!!
         XposedHelpers.callMethod(newBuilder, "url", newUrl)
-        return XposedHelpers.callMethod(newBuilder, "build")
+        return XposedHelpers.callMethod(newBuilder, "build")!!
     }
 }

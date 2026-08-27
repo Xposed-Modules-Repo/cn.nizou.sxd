@@ -46,7 +46,7 @@ class RiskDetectHook(
     private fun hookSupervisionHelper() {
         runCatching {
             val supClass = findClass("com.fenbi.android.leo.imgsearch.sdk.check.helper.SupervisionHelper")
-            supervisionHandle = supClass.findMethod("j", Boolean::class.javaPrimitiveType)
+            supervisionHandle = supClass.findMethod("j", Boolean::class.javaPrimitiveType!!)
                 .intercept("supervision_hide") { chain ->
                     if (Risk.blockSupervision) null else chain.proceed()
                 }
