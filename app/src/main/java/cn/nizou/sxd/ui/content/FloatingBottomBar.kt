@@ -12,7 +12,6 @@ import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,8 +26,6 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.LocalContentColor as M3LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -79,6 +76,8 @@ import cn.nizou.sxd.ui.content.liquid.innerShadow
 import cn.nizou.sxd.ui.content.liquid.lens
 import cn.nizou.sxd.ui.content.liquid.rememberCombinedBackdrop
 import cn.nizou.sxd.ui.content.liquid.vibrancy
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.blur.Backdrop
@@ -98,6 +97,7 @@ import kotlin.math.cos
 import kotlin.math.sign
 import kotlin.math.sin
 import kotlin.math.sqrt
+import androidx.compose.material3.LocalContentColor as M3LocalContentColor
 
 private val LocalFloatingBottomBarContentColor = staticCompositionLocalOf { Color.Unspecified }
 private val LocalFloatingBottomBarTabScale = staticCompositionLocalOf { { 1f } }
