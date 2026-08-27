@@ -56,8 +56,8 @@ class RetrofitHook(
     }
 
     private fun intercept(chain: Any): Any? {
-        val request = XposedHelpers.callMethod(chain, "request")
-        val httpUrl = XposedHelpers.callMethod(request, "url")
+        val request = XposedHelpers.callMethod(chain, "request")!!
+        val httpUrl = XposedHelpers.callMethod(request, "url")!!
         val method = XposedHelpers.callMethod(request, "method").toString()
         val fullPath = XposedHelpers.callMethod(httpUrl, "encodedPath")?.toString() ?: "/"
 
