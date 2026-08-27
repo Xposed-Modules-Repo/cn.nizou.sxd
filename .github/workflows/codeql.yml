@@ -1,0 +1,82 @@
+name: "CodeQL"
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  schedule:
+    - cron: "17 3 * * 2"
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    permissions:
+      # Required by github/codeql-action/analyze.
+      security-events: write
+      # Required to check out the repository.
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # GitHub Actions is interpreted; no build is required.
+          - language: actions
+            build-mode: none
+            fetch-depth: 1
+
+          # Kotlin/Java requires a real build. Autobuild cannot reproduce this
+          # Gradle environment, so build the relevant variant explicitly.
+          - language: java-kotlin
+            build-mode: manual
+            fetch-depth: 0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: ${{ matrix.fetch-depth }}
+
+      - name: Set up JDK 17
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Grant Gradle wrapper execute permission
+        if: matrix.language == 'java-kotlin'
+        run: chmod +x gradlew
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Compile Kotlin/Java for CodeQL
+        if: matrix.language == 'java-kotlin'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          ./gradlew \
+            --no-daemon \
+            --no-build-cache \
+            --stacktrace \
+            :app:compileDebugSources
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"

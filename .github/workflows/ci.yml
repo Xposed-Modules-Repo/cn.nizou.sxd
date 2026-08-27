@@ -9,7 +9,7 @@ on:
       - '**/*.md'
       - '.editorconfig'
       - '.gitignore'
-      - '.github/**'
+      - '.idea/**'
   pull_request:
     branches:
       - main
@@ -18,7 +18,7 @@ on:
       - '**/*.md'
       - '.editorconfig'
       - '.gitignore'
-      - '.github/**'
+      - '.idea/**'
   workflow_dispatch:
 
 permissions:
@@ -33,12 +33,15 @@ jobs:
   lint-and-test:
     name: Lint & Test
     runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      !startsWith(github.event.head_commit.message, '[skip ci]')
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
@@ -68,10 +71,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
@@ -98,8 +101,11 @@ jobs:
             cp -v "$apk" dist/apk/
           done
 
-          # 收集混淆映射（release 已开 minify）
-          find app/build/outputs/mapping -name mapping.txt -exec cp -v {} dist/mapping/ \; || true
+          # 收集混淆映射（release 已开 minify）。按变体目录重命名避免碰撞（借鉴 wekit）。
+          find app/build/outputs/mapping -name mapping.txt -print0 | while IFS= read -r -d '' m; do
+            variantDir=$(basename "$(dirname "$m")")   # e.g. release
+            cp -v "$m" "dist/mapping/mapping-${variantDir}.txt"
+          done || true
 
           echo "Collected APKs:"; ls -1 dist/apk
           echo "Collected mappings:"; ls -1 dist/mapping || echo "(none)"
