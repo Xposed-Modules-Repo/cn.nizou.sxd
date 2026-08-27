@@ -18,28 +18,22 @@ import cn.nizou.sxd.ui.theme.AutoOralTheme
 import cn.nizou.sxd.util.StringRes
 
 /**
- * 宿主注入面板（替代旧 SettingsDialog 的悬浮 AlertDialog）。
+ * 宿主注入面板。
  *
- * 方案：在宿主 SettingsActivity 的 window 根视图（decorView）上**添加一个全屏 ComposeView
- * 覆盖层**，把模块的 Compose 设置页渲染进宿主界面。
+ * 崩溃根因修复：宿主 Activity 的 context 的 classLoader 是**宿主** classLoader，没有 Compose 类，
+ * 直接 `new ComposeView(activity)` 会 NoClassDefFound → 闪退。这里用 [ModuleContextWrapper]
+ * 包装 context：getClassLoader() 返回**模块** classLoader（含模块打包的 Compose 运行库），
+ * 并把模块资源注入其 Resources；ComposeView 用该包装 context 创建。生命周期经
+ * [LifecycleProvider] 转发宿主 Activity 事件。
  *
- * 为什么不是悬浮 Dialog：
- * - 旧实现用 `AlertDialog` 单独开一个 window，样式与宿主/ Material3 割裂、无法用 Compose 主题，
- *   且需手动 addAssetPath 才能解析模块资源。
- * - 本方案把 Compose 内容**注入宿主当前 window 的视图树**，作为一个全屏「页面面板」：
- *   共享宿主 window 的 insets/焦点/返回键语义，观感与宿主设置页融为一体；关闭即从视图树移除。
- * - 模块的 Compose 运行库已随模块 APK 打包并由模块 classloader 加载，宿主进程内可直接 new
- *   ComposeView + setContent（参考 WeKit 在微信内的注入做法）。
- *
- * 生命周期：注入的 ComposeView 使用自管理的 [XposedLifecycleOwner]，不依赖宿主 Activity 的
- * 生命周期类型；面板关闭时销毁 owner，避免泄漏。
+ * 方案：在宿主 SettingsActivity 的 decorView 上叠加一个全屏 ComposeView 覆盖层，渲染模块的
+ * Compose 设置页。关闭即从视图树移除并销毁 owner。
  */
 class HostComposePanel private constructor(
     private val activity: Activity,
     private val owner: XposedLifecycleOwner,
     private val composeView: ComposeView
 ) {
-    /** 返回键处理器（宿主 Activity 的 onBackPressed 桥接至此）。 */
     var onBack: (() -> Unit)? = null
 
     fun show() {
@@ -54,49 +48,42 @@ class HostComposePanel private constructor(
     fun dismiss() {
         val decor = activity.window.decorView as ViewGroup
         runCatching { decor.removeView(composeView) }
-        runCatching { owner.onPause(); owner.onStop(); owner.onDestroy() }
+        // owner 生命周期交给 LifecycleProvider 转发；这里仅触发销毁（若宿主已销毁则幂等）。
+        runCatching { owner.onDestroy() }
     }
 
     companion object {
         /** 在宿主 Activity 的 decorView 上叠加一个全屏 Compose 设置面板。 */
-        fun showSettings(activity: Activity): HostComposePanel {
-            val owner = XposedLifecycleOwner.create()
-            val backRef = mutableStateOf<(() -> Unit)?>(null)
-            val composeView = ComposeView(activity).apply {
-                setViewTreeLifecycleOwner(owner)
-                setViewTreeViewModelStoreOwner(owner)
-                setViewTreeSavedStateRegistryOwner(owner)
-                setContent {
-                    AutoOralTheme {
-                        Surface(modifier = Modifier) {
-                            SettingsScreen(
-                                res = StringRes(XposedInit.moduleRes),
-                                onBack = { backRef.value?.invoke() }
-                            )
-                        }
-                    }
-                }
+        fun showSettings(activity: Activity): HostComposePanel =
+            showPanel(activity) { onBack ->
+                SettingsScreen(
+                    res = StringRes(XposedInit.moduleRes),
+                    onBack = onBack
+                )
             }
-            val panel = HostComposePanel(activity, owner, composeView)
-            // 面板自身的返回按钮 → 关闭自身；同时暴露给宿主 back 键桥接
-            backRef.value = { panel.dismiss() }
-            panel.onBack = { panel.dismiss() }
-            panel.show()
-            return panel
-        }
 
         /** 在宿主 Activity 的 decorView 上叠加一个全屏 Compose 自定义分数面板。 */
-        fun showCustomScore(activity: Activity): HostComposePanel {
-            val owner = XposedLifecycleOwner.create()
+        fun showCustomScore(activity: Activity): HostComposePanel =
+            showPanel(activity) { onBack ->
+                CustomScoreScreen(onBack = onBack)
+            }
+
+        private fun showPanel(
+            activity: Activity,
+            content: @Composable (onBack: () -> Unit) -> Unit
+        ): HostComposePanel {
+            val owner = XposedLifecycleOwner.forActivity(activity)
             val backRef = mutableStateOf<(() -> Unit)?>(null)
-            val composeView = ComposeView(activity).apply {
+            // 关键修复：用模块 classLoader context 创建 ComposeView，避免宿主无 Compose 类闪退。
+            val moduleContext = ModuleContextWrapper.wrap(activity)
+            val composeView = ComposeView(moduleContext).apply {
                 setViewTreeLifecycleOwner(owner)
                 setViewTreeViewModelStoreOwner(owner)
                 setViewTreeSavedStateRegistryOwner(owner)
                 setContent {
                     AutoOralTheme {
                         Surface(modifier = Modifier) {
-                            CustomScoreScreen(onBack = { backRef.value?.invoke() })
+                            content { backRef.value?.invoke() }
                         }
                     }
                 }

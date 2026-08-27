@@ -5,6 +5,7 @@ import android.content.res.AssetManager
 import android.content.res.Resources
 import android.util.Log
 import cn.nizou.sxd.hook.BaseHook
+import cn.nizou.sxd.util.HookStatus
 import cn.nizou.sxd.util.install
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface
@@ -27,6 +28,7 @@ class XposedInit : XposedModule() {
         self = this
         modulePath = moduleApplicationInfo.sourceDir
         moduleRes = createModuleResources(modulePath)
+        HookStatus.markFrameworkLoaded()
         log(
             Log.INFO, "AutoOral",
             "event=module_loaded process=${param.processName} api=${apiVersion} framework=${frameworkName}"

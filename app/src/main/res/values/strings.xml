@@ -19,4 +19,11 @@
     <string name="key_debug">debug</string>
     <string name="key_double_nickname_length">double_nickname_length</string>
     <string name="key_remove_restriction_on_nickname">remove_restriction_on_nickname</string>
+    <string name="key_modify_answer">modify_answer</string>
+    <string name="key_modify_title">modify_title</string>
+    <string name="key_simian_mode">simian_mode</string>
+    <string name="key_custom_answers">custom_answers</string>
+    <string name="key_custom_title">custom_title</string>
+    <string name="key_practice_answer">practice_answer</string>
+    <string name="key_vip">vip</string>
 </resources>

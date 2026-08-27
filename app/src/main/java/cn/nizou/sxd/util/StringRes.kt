@@ -24,6 +24,13 @@ class StringRes(private val resources: Resources) {
     val KEY_VERSION = resources.getString(R.string.key_version)
     val KEY_GOTO_SETTINGS = resources.getString(R.string.key_goto_settings)
     val KEY_DEBUG = resources.getString(R.string.key_debug)
+    val KEY_MODIFY_ANSWER = resources.getString(R.string.key_modify_answer)
+    val KEY_MODIFY_TITLE = resources.getString(R.string.key_modify_title)
+    val KEY_SIMIAN_MODE = resources.getString(R.string.key_simian_mode)
+    val KEY_CUSTOM_ANSWERS = resources.getString(R.string.key_custom_answers)
+    val KEY_CUSTOM_TITLE = resources.getString(R.string.key_custom_title)
+    val KEY_PRACTICE_ANSWER = resources.getString(R.string.key_practice_answer)
+    val KEY_VIP = resources.getString(R.string.key_vip)
 
     /** 按 key 字符串取同名 R.string 的值（供 SettingsPrefs 通用读写） */
     fun keyValue(name: String): String = resources.getString(

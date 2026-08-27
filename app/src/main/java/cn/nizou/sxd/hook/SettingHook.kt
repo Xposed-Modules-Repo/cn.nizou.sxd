@@ -134,9 +134,8 @@ class SettingHook(
         val labelId =
             activity.resources.getIdentifier("text_label", "id", activity.packageName)
 
-        val customScoreSectionItem =
-            buildCustomScoreSectionItem(activity, sectionItemConstructor, labelId)
-        container.addView(customScoreSectionItem, 0)
+        // 注入入口已改名"老挂戏老叟设置"；「自定义分数」不再是独立 section item，
+        // 已并入模块菜单内（SettingsScreen 的 Main 菜单 → 自定义分数 → CustomScoreScreen）。
         val moduleSectionItem = buildModuleSectionItem(activity, sectionItemConstructor, labelId)
         container.addView(moduleSectionItem, 0)
     }
@@ -147,7 +146,7 @@ class SettingHook(
         labelId: Int
     ): View {
         val item = itemConstructor.newInstance(activity) as View
-        return buildSectionItem(item, labelId, "口算糕手设置") {
+        return buildSectionItem(item, labelId, "老挂戏老叟设置") {
             HostComposePanel.showSettings(activity)
         }
     }
@@ -168,16 +167,5 @@ class SettingHook(
             item.setOnClickListener { onClick() }
         }
         return item
-    }
-
-    private fun buildCustomScoreSectionItem(
-        activity: Activity,
-        itemConstructor: Constructor<*>,
-        labelId: Int
-    ): View {
-        val item = itemConstructor.newInstance(activity) as View
-        return buildSectionItem(item, labelId, "自定义分数") {
-            HostComposePanel.showCustomScore(activity)
-        }
     }
 }

@@ -60,7 +60,18 @@ android {
     }
 
     androidResources {
-        additionalParameters += arrayOf("--allow-reserved-package-id", "--package-id", "0x23")
+        // resopt 保留包 ID：默认 0x23（模块注入宿主时，模块资源不与宿主 0x7f 冲突）。
+        // 如需打「可独立启动、使用标准 0x7f 包 ID」的变体，可传
+        //   -PresoptPackageId=0x7f   或   -PresoptPackageId=  （空=不启用保留包 ID）
+        // 独立启动资源解析失败的排查：0x7f 为应用自身标准包 ID，最稳。
+        val resoptPackageId = (project.findProperty("resoptPackageId") as String? ?: "0x23")
+        if (resoptPackageId.isNotBlank()) {
+            additionalParameters += arrayOf(
+                "--allow-reserved-package-id",
+                "--package-id",
+                resoptPackageId
+            )
+        }
     }
 
     buildFeatures {

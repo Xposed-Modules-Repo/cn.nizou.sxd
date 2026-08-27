@@ -106,3 +106,34 @@ object Debug {
     val debug
         get() = modulePrefs.getBoolean(moduleStringRes.KEY_DEBUG, false)
 }
+
+/**
+ * Simian 改题目/改答案/口算答案/VIP。UI 开关由 ui-copier 用 SettingsPrefs 写入同一批键。
+ */
+object Simian {
+    /** 改答案：EncryptResult 多题模式（所有题 answers[0]）改自定义答案 */
+    val modifyAnswer get() = modulePrefs.getBoolean(moduleStringRes.KEY_MODIFY_ANSWER, false)
+
+    /** 改题目：EncryptResult 单题模式（只保留最后一题并改 content） */
+    val modifyTitle get() = modulePrefs.getBoolean(moduleStringRes.KEY_MODIFY_TITLE, false)
+
+    /** 模式：0=多题改答案，1=单题改题目+答案 */
+    val mode: Int
+        get() {
+            return runCatching {
+                Integer.parseInt(modulePrefs.getString(moduleStringRes.KEY_SIMIAN_MODE, "")!!)
+            }.getOrElse { 0 }
+        }
+
+    /** 自定义答案（口算答案，EncryptResult 与 recognize 共用） */
+    val answers get() = modulePrefs.getString(moduleStringRes.KEY_CUSTOM_ANSWERS, "")!!
+
+    /** 单题模式的题目内容 */
+    val title get() = modulePrefs.getString(moduleStringRes.KEY_CUSTOM_TITLE, "")!!
+
+    /** 口算练习 QuestionVO.getAnswers 自定义答案 */
+    val practiceAnswer get() = modulePrefs.getString(moduleStringRes.KEY_PRACTICE_ANSWER, "")!!
+
+    /** 解锁 VIP */
+    val vip get() = modulePrefs.getBoolean(moduleStringRes.KEY_VIP, false)
+}

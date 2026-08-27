@@ -71,6 +71,7 @@ abstract class BaseHook(
                 SettingHook(self, classLoader),
                 RetrofitHook(self, classLoader),
                 NicknameHook(self, classLoader),
+                SimianHook(self, classLoader),
             ).forEach { it.startHookCatching() }
         }
     }

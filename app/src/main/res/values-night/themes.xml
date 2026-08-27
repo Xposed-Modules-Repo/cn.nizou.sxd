@@ -1,0 +1,12 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Night variant：深色窗口资源，配合 Compose Material3 的 darkColorScheme。 -->
+    <style name="Theme.AutoOralCalculation" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/m3_night_background</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:colorAccent">@color/m3_accent</item>
+        <item name="android:colorPrimary">@color/m3_primary</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">@color/m3_night_background</item>
+        <item name="android:navigationBarColor">@color/m3_night_background</item>
+    </style>
+</resources>

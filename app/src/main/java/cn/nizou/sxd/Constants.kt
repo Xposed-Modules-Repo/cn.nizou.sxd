@@ -43,6 +43,17 @@ object Classname {
     const val INTERCEPTOR = "okhttp3.Interceptor"
 
     const val GSON = "com.google.gson.Gson"
+
+    // ---- Simian 改题目/改答案 hook 点 ----
+    const val ENCRYPT_RESULT = "com.fenbi.android.leo.webapp.secure.commands.EncryptResult"
+
+    const val JS_BRIDGE_BEAN_A = "com.yuanfudao.android.common.webview.base.JsBridgeBean\$a"
+
+    const val JS_BRIDGE_BASE = "com.yuanfudao.android.common.webview.base.a"
+
+    const val QUESTION_VO = "com.fenbi.android.leo.exercise.data.QuestionVO"
+
+    const val USER_VIP_VO = "com.fenbi.android.leo.business.user.vip.UserVipVO"
 }
 
 const val MODULE_PREFS_NAME = "auto_oral_calculation"

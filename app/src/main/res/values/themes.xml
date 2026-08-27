@@ -1,4 +1,20 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Theme.AutoOralCalculation" parent="android:Theme.Material.Light.NoActionBar" />
+    <!--
+      Base application theme (独立模块 UI，纯 Compose Material3)。
+
+      说明：Jetpack Compose 的 androidx.compose.material3 依赖**不**提供 XML 形式的
+      Theme.Material3.* 主题（那是 View 版 com.google.android.material 的产物）。
+      因此这里以平台 Material Light.NoActionBar 为父主题，并补齐 Compose/Material3
+      需要的窗口属性，避免独立启动时因缺失窗口资源而崩溃（resopt 0x23 重打包场景下
+      尤其关键）。Day/Night 见 values-night/themes.xml。
+    -->
+    <style name="Theme.AutoOralCalculation" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:colorAccent">@color/m3_accent</item>
+        <item name="android:colorPrimary">@color/m3_primary</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">@android:color/white</item>
+        <item name="android:navigationBarColor">@android:color/white</item>
+    </style>
 </resources>

@@ -1,0 +1,6 @@
+<resources>
+    <!-- Material3 基础色板（独立 UI 用；与 Theme.kt 的 lightColorScheme/darkColorScheme 对齐） -->
+    <color name="m3_primary">#006A6A</color>
+    <color name="m3_accent">#006A6A</color>
+    <color name="m3_night_background">#141218</color>
+</resources>

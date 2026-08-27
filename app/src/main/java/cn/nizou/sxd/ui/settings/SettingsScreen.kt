@@ -1,289 +1,118 @@
 package cn.nizou.sxd.ui.settings
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import cn.nizou.sxd.BuildConfig
-import cn.nizou.sxd.entities.AutoAnswerMode
 import cn.nizou.sxd.ui.components.BaseWidget
-import cn.nizou.sxd.ui.components.RadioButtonWidget
+import cn.nizou.sxd.ui.components.HookStatusCard
+import cn.nizou.sxd.ui.components.M3BackButton
+import cn.nizou.sxd.ui.components.M3ListScaffold
 import cn.nizou.sxd.ui.components.SegmentedColumn
-import cn.nizou.sxd.ui.components.SwitchWidget
-import cn.nizou.sxd.ui.components.TextFieldDialogWidget
-import cn.nizou.sxd.util.SettingsPrefs
 import cn.nizou.sxd.util.StringRes
-import cn.nizou.sxd.util.openGithub
 
 /**
- * 完整设置页（覆盖 res/xml/host_settings.xml 全部开关：通用/练习/PK/Debug/关于）。
- * 独立模块 UI 与宿主注入面板共用此 Composable。
- *
- * @param res StringRes 实例：独立 MainActivity 传 `StringRes(resources)`（模块自身资源）；
- *            宿主注入面板传 `StringRes(XposedInit.moduleRes)`（模块 APK 经 addAssetPath 加载）。
- * @param onBack 返回/关闭回调（独立页 finish()，宿主面板移除 ComposeView）。
+ * 导航目标（照抄 WeKit `SettingsRoute` 模型的简化版，去掉 pager/第三方 nav 依赖）。
+ * 「菜单与内容分离」：Main 是功能菜单列表页，点进某一项进入对应 Category/功能详情页。
  */
-@OptIn(ExperimentalMaterial3Api::class)
+sealed interface SettingsRoute {
+    data object Main : SettingsRoute
+    data object General : SettingsRoute
+    data object Practice : SettingsRoute
+    data object Pk : SettingsRoute
+    data object CustomScore : SettingsRoute
+    data object CustomAnswer : SettingsRoute
+    data object Debug : SettingsRoute
+    data object About : SettingsRoute
+}
+
+/**
+ * 设置页根。独立 MainActivity 与宿主注入面板共用：Main 菜单列表 + 分类详情页导航。
+ *
+ * @param res StringRes 实例（独立 MainActivity 传模块自身资源；宿主面板传模块 APK 加载的 resources）。
+ * @param onBack 关闭整个面板/页面（回退到 Main 之后再按返回才触发）。
+ */
 @Composable
 fun SettingsScreen(
     res: StringRes,
     onBack: () -> Unit
 ) {
-    val context = LocalContext.current
+    // 极简内存 backstack：Main 为根，navigate 压栈，goBack 弹栈；栈根再按返回则 onBack。
+    val backStack = remember { mutableStateListOf<SettingsRoute>(SettingsRoute.Main) }
+    val current = backStack.last()
 
-    // ---- 状态：全部直接绑定 SharedPrefs（即时生效） ----
-    var alwaysTrue by remember {
-        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_ALWAYS_TRUE_ANSWER, true))
-    }
-    var doubleNickname by remember {
-        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_DOUBLE_NICKNAME_LENGTH, true))
-    }
-    var removeRestriction by remember {
-        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_REMOVE_RESTRICTION_ON_NICKNAME, false))
+    fun navigate(route: SettingsRoute) {
+        backStack.add(route)
     }
 
-    var autoHonor by remember {
-        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_AUTO_HONOR, false))
-    }
-    var autoPractice by remember {
-        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_AUTO_PRACTICE, true))
-    }
-    var autoPracticeQuick by remember {
-        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_AUTO_PRACTICE_QUICK, false))
-    }
-    var autoPracticeCyclic by remember {
-        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_AUTO_PRACTICE_CYCLIC, false))
-    }
-    var autoPracticeCyclicInterval by remember {
-        mutableStateOf(SettingsPrefs.readString(res, res.KEY_AUTO_PRACTICE_CYCLIC_INTERVAL, "1500"))
-    }
-
-    var autoAnswerConfigIndex by remember {
-        mutableIntStateOf(
-            runCatching {
-                SettingsPrefs.readString(res, res.KEY_AUTO_ANSWER_CONFIG, "0").toInt()
-            }.getOrDefault(0)
-        )
-    }
-    var customAnswerConfig by remember {
-        mutableStateOf(SettingsPrefs.readString(res, res.KEY_CUSTOM_ANSWER_CONFIG, ""))
-    }
-    var quickModeMustWin by remember {
-        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_QUICK_MODE_MUST_WIN, false))
-    }
-    var quickModeInterval by remember {
-        mutableStateOf(SettingsPrefs.readString(res, res.KEY_QUICK_MODE_INTERVAL, "200"))
-    }
-    var pkCyclic by remember {
-        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_PK_CYCLIC, false))
-    }
-    var pkCyclicInterval by remember {
-        mutableStateOf(SettingsPrefs.readString(res, res.KEY_PK_CYCLIC_INTERVAL, "1500"))
-    }
-
-    var debug by remember {
-        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_DEBUG, false))
-    }
-
-    val mode = AutoAnswerMode.entries.getOrElse(autoAnswerConfigIndex) { AutoAnswerMode.DISABLE }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("口算糕手设置") },
-                navigationIcon = {
-                    androidx.compose.material3.IconButton(onClick = onBack) {
-                        Text("‹", style = MaterialTheme.typography.headlineMedium)
-                    }
-                }
-            )
+    fun goBack() {
+        if (backStack.size > 1) {
+            backStack.removeAt(backStack.lastIndex)
+        } else {
+            onBack()
         }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 32.dp)
-        ) {
-            item { SegmentedColumn(title = "通用") {
-                SwitchWidget(
-                    title = "一切输入视为正确答案",
-                    description = "手写输入识别结果永远为正确答案",
-                    checked = alwaysTrue,
-                    onCheckedChange = {
-                        alwaysTrue = it
-                        SettingsPrefs.writeBoolean(res, res.KEY_ALWAYS_TRUE_ANSWER, it)
-                    }
-                )
-                SwitchWidget(
-                    title = "双倍昵称长度",
-                    checked = doubleNickname,
-                    onCheckedChange = {
-                        doubleNickname = it
-                        SettingsPrefs.writeBoolean(res, res.KEY_DOUBLE_NICKNAME_LENGTH, it)
-                    }
-                )
-                SwitchWidget(
-                    title = "解除昵称字符限制",
-                    description = "开启后，昵称可以使用任意非空白字符",
-                    checked = removeRestriction,
-                    onCheckedChange = {
-                        removeRestriction = it
-                        SettingsPrefs.writeBoolean(res, res.KEY_REMOVE_RESTRICTION_ON_NICKNAME, it)
-                    }
-                )
-            } }
+    }
 
-            item { SegmentedColumn(title = "练习") {
-                SwitchWidget(
-                    title = "自动上分",
-                    description = "进入任意口算练习页面挂机即可",
-                    checked = autoHonor,
-                    onCheckedChange = {
-                        autoHonor = it
-                        SettingsPrefs.writeBoolean(res, res.KEY_AUTO_HONOR, it)
-                    }
-                )
-                SwitchWidget(
-                    title = "练习场自动答题",
-                    enabled = autoHonor,
-                    checked = autoPractice,
-                    onCheckedChange = {
-                        autoPractice = it
-                        SettingsPrefs.writeBoolean(res, res.KEY_AUTO_PRACTICE, it)
-                    }
-                )
-                SwitchWidget(
-                    title = "极速答题",
-                    enabled = autoHonor && autoPractice,
-                    checked = autoPracticeQuick,
-                    onCheckedChange = {
-                        autoPracticeQuick = it
-                        SettingsPrefs.writeBoolean(res, res.KEY_AUTO_PRACTICE_QUICK, it)
-                    }
-                )
-                SwitchWidget(
-                    title = "循环练习",
-                    enabled = autoHonor && autoPractice,
-                    checked = autoPracticeCyclic,
-                    onCheckedChange = {
-                        autoPracticeCyclic = it
-                        SettingsPrefs.writeBoolean(res, res.KEY_AUTO_PRACTICE_CYCLIC, it)
-                    }
-                )
-                TextFieldDialogWidget(
-                    title = "循环时间间隔",
-                    value = autoPracticeCyclicInterval,
-                    placeholder = "单位毫秒，默认值1500",
-                    enabled = autoHonor && autoPractice && autoPracticeCyclic,
-                    keyboardType = KeyboardType.Number,
-                    filter = { it.filter { c -> c.isDigit() } },
-                    onValueChange = {
-                        autoPracticeCyclicInterval = it
-                        SettingsPrefs.writeString(res, res.KEY_AUTO_PRACTICE_CYCLIC_INTERVAL, it)
-                    }
-                )
-            } }
+    when (current) {
+        SettingsRoute.Main -> SettingsMainScreen(onNavigate = ::navigate, onBack = ::goBack)
+        SettingsRoute.General -> GeneralScreen(res, onBack = ::goBack)
+        SettingsRoute.Practice -> PracticeScreen(res, onBack = ::goBack)
+        SettingsRoute.Pk -> PkScreen(res, onBack = ::goBack)
+        SettingsRoute.CustomScore -> CustomScoreScreen(onBack = ::goBack)
+        SettingsRoute.CustomAnswer -> CustomAnswerScreen(res, onBack = ::goBack)
+        SettingsRoute.Debug -> DebugScreen(res, onBack = ::goBack)
+        SettingsRoute.About -> AboutScreen(onBack = ::goBack)
+    }
+}
 
-            item { SegmentedColumn(title = "PK") {
-                AutoAnswerMode.entries.forEach { m ->
-                    RadioButtonWidget(
-                        title = m.value,
-                        selected = mode == m,
-                        onSelect = {
-                            autoAnswerConfigIndex = m.ordinal
-                            SettingsPrefs.writeString(res, res.KEY_AUTO_ANSWER_CONFIG, m.ordinal.toString())
+private data class MenuEntry(
+    val title: String,
+    val description: String?,
+    val route: SettingsRoute
+)
+
+/**
+ * 功能菜单列表。增删功能 = 加一个 [MenuEntry] + 一个路由 + 一个详情 Composable，即插即用。
+ */
+private fun moduleMenuEntries(): List<MenuEntry> = listOf(
+    MenuEntry("通用", "识别/昵称通用开关", SettingsRoute.General),
+    MenuEntry("练习", "口算练习自动答题", SettingsRoute.Practice),
+    MenuEntry("PK", "极速/PK 自动答题", SettingsRoute.Pk),
+    MenuEntry("自定义分数", "刷取指定分数", SettingsRoute.CustomScore),
+    MenuEntry("自定义答案", "改题目/改答案/口算答案", SettingsRoute.CustomAnswer),
+    MenuEntry("Debug", "调试开关", SettingsRoute.Debug),
+    MenuEntry("关于", "版本与项目信息", SettingsRoute.About)
+)
+
+@Composable
+private fun SettingsMainScreen(
+    onNavigate: (SettingsRoute) -> Unit,
+    onBack: () -> Unit
+) {
+    M3ListScaffold(
+        title = "老挂戏老叟",
+        navigationIcon = { M3BackButton(onClick = onBack) }
+    ) {
+        item { HookStatusCard() }
+        item {
+            SegmentedColumn(title = "功能菜单") {
+                moduleMenuEntries().forEach { entry ->
+                    BaseWidget(
+                        title = entry.title,
+                        description = entry.description,
+                        onClick = { onNavigate(entry.route) },
+                        trailingContent = {
+                            Text("›", style = MaterialTheme.typography.titleLarge)
                         }
                     )
                 }
-                TextFieldDialogWidget(
-                    title = "自定义答题",
-                    value = customAnswerConfig,
-                    placeholder = "请输入自定义的js代码",
-                    enabled = mode == AutoAnswerMode.CUSTOM,
-                    singleLine = false,
-                    onValueChange = {
-                        customAnswerConfig = it
-                        SettingsPrefs.writeString(res, res.KEY_CUSTOM_ANSWER_CONFIG, it)
-                    }
-                )
-                SwitchWidget(
-                    title = "极速模式稳赢",
-                    enabled = mode == AutoAnswerMode.QUICK,
-                    checked = quickModeMustWin,
-                    onCheckedChange = {
-                        quickModeMustWin = it
-                        SettingsPrefs.writeBoolean(res, res.KEY_QUICK_MODE_MUST_WIN, it)
-                    }
-                )
-                TextFieldDialogWidget(
-                    title = "极速模式模拟答题间隔",
-                    value = quickModeInterval,
-                    placeholder = "单位毫秒，默认值200",
-                    enabled = mode == AutoAnswerMode.QUICK,
-                    keyboardType = KeyboardType.Number,
-                    filter = { it.filter { c -> c.isDigit() } },
-                    onValueChange = {
-                        quickModeInterval = it
-                        SettingsPrefs.writeString(res, res.KEY_QUICK_MODE_INTERVAL, it)
-                    }
-                )
-                SwitchWidget(
-                    title = "循环PK",
-                    enabled = mode == AutoAnswerMode.QUICK || mode == AutoAnswerMode.STANDARD,
-                    checked = pkCyclic,
-                    onCheckedChange = {
-                        pkCyclic = it
-                        SettingsPrefs.writeBoolean(res, res.KEY_PK_CYCLIC, it)
-                    }
-                )
-                TextFieldDialogWidget(
-                    title = "循环时间间隔",
-                    value = pkCyclicInterval,
-                    placeholder = "单位毫秒，默认值1500",
-                    enabled = pkCyclic,
-                    keyboardType = KeyboardType.Number,
-                    filter = { it.filter { c -> c.isDigit() } },
-                    onValueChange = {
-                        pkCyclicInterval = it
-                        SettingsPrefs.writeString(res, res.KEY_PK_CYCLIC_INTERVAL, it)
-                    }
-                )
-            } }
-
-            item { SegmentedColumn(title = "Debug") {
-                SwitchWidget(
-                    title = "DEBUG",
-                    description = "没事别开",
-                    checked = debug,
-                    onCheckedChange = {
-                        debug = it
-                        SettingsPrefs.writeBoolean(res, res.KEY_DEBUG, it)
-                    }
-                )
-            } }
-
-            item { SegmentedColumn(title = "关于") {
-                BaseWidget(title = "Github", onClick = { context.openGithub() })
-                BaseWidget(title = "版本", description = BuildConfig.VERSION_NAME)
-            } }
-
-            item { Box(Modifier.padding(16.dp)) {} }
+            }
         }
+        item { Box(Modifier.padding(24.dp)) {} }
     }
 }
