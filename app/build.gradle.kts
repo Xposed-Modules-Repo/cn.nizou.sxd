@@ -53,8 +53,8 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
     androidResources {
@@ -80,7 +80,8 @@ android {
 
 tasks.withType<KotlinCompile> {
     compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_17)
+        // JVM 21：miuix-nav 0.9.4-rc01 内联字节码是 JVM 21（wekit 同款 JDK 21）
+        jvmTarget.set(JvmTarget.JVM_21)
         // 对齐 wekit：全局 OptIn Material3 Expressive API（MaterialExpressiveTheme/MotionScheme 等）
         freeCompilerArgs.add("-opt-in=androidx.compose.material3.ExperimentalMaterial3Api")
         freeCompilerArgs.add("-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi")
