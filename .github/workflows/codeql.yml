@@ -46,12 +46,12 @@ jobs:
         with:
           fetch-depth: ${{ matrix.fetch-depth }}
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         if: matrix.language == 'java-kotlin'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
           cache: gradle
 
       - name: Grant Gradle wrapper execute permission
