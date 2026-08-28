@@ -106,7 +106,6 @@ import kotlin.io.path.fileSize
 import kotlin.io.path.getLastModifiedTime
 import kotlin.io.path.name
 import kotlin.io.path.readText
-import kotlin.io.path.toFile
 import kotlin.math.log10
 import kotlin.math.pow
 
@@ -237,8 +236,9 @@ fun LogsScreen(
                                 if (file == null) {
                                     Toast.makeText(context, "暂无日志可保存", Toast.LENGTH_SHORT).show()
                                 } else if (saveLauncher != null) {
+                                    val launcher = saveLauncher
                                     saveTargetFile = file
-                                    saveLauncher.launch(file.name)
+                                    launcher.launch(file.name)
                                 } else {
                                     scope.launch { saveLogToModuleDir(context, file) }
                                 }
@@ -545,7 +545,7 @@ private suspend fun saveLogToModuleDir(context: Context, file: Path) {
                 "files/log-export"
             ).apply { mkdirs() }
             val target = File(exportDir, file.name)
-            file.toFile().inputStream().use { input ->
+            File(file.toString()).inputStream().use { input ->
                 target.outputStream().use { output -> input.copyTo(output) }
             }
             target.absolutePath

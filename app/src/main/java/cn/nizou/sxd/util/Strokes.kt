@@ -63,7 +63,7 @@ private fun extractLibFromApk(self: XposedModule): File? = runCatching {
     val abi = self.moduleApplicationInfo.nativeLibraryDir
         .split(File.separator).lastOrNull()
         ?.takeIf { it.isNotBlank() }
-        ?: self.moduleApplicationInfo.primaryCpuAbi
+        ?: android.os.Build.SUPPORTED_ABIS.firstOrNull()
         ?: "arm64-v8a"
     val zip = ZipFile(apkFile)
     try {
