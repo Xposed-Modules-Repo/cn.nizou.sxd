@@ -26,6 +26,17 @@
 - 动态配色（material-kolor）：9 种调色板样式 + 色彩规范 2021/2025 + 主题模式 + 动态壁纸取色 + 自定义种子色
 - 预测返回动画 + 页面转场动画（AOSP / Miuix），返回逻辑优化
 
+## 借鉴仓库
+
+本项目的 UI、注入架构与部分功能参考 / 移植自以下开源项目：
+
+| 仓库 | 借鉴内容 |
+|------|---------|
+| [Ujhhgtg/WeKit](https://github.com/Ujhhgtg/WeKit) | 完整 UI 体系：注入面板（全屏 4 tab pager + 悬浮胶囊底栏 LiquidGlass + M3ListScaffold + SegmentedColumn）、模块本体启动器页、MaterialSymbols 图标、动态配色（material-kolor 9 调色板 + 色彩规范 2021/2025 + 主题模式 + 动态壁纸取色 + 种子色）、预测返回动画 + 页面转场动画（miuix NavDisplay / AospNavTransition）、返回逻辑、设置页（UI 引擎 / 主题模式 / 预见性返回动画 / 页面过渡动画 / 调色板样式 / 颜色规格） |
+| [TinyHai/AutoOralCalculation](https://github.com/TinyHai/AutoOralCalculation) | 本项目前身（原 cn.tinyhai.auto_oral_calculation）：口算自动答题 / 极速模式 / 循环练习 / 刷分 / 自定义答题脚本的 hook 逻辑基础 |
+| [z2010643575/Simian](https://github.com/z2010643575/Simian) | Simian 改题目 / 改题目数量 / 口算答案 / 解锁 VIP 的 hook 点（EncryptResult / JsBridgeBean / QuestionVO / UserVipVO） |
+| [ExElectron/Xiaoyuan_Kousuan_2026](https://github.com/ExElectron/Xiaoyuan_Kousuan_2026) | PK 秒结算（秒答题）：MITM 7 大 patch 的运行时注入移植（CSS 动画 0s / 音效静音 / 自动画线 / 跳题 0ms / 判题恒真 / 跳过识别等待） |
+
 ## 构建
 
 ```bash
