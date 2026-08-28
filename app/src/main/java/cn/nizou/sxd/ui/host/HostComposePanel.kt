@@ -8,14 +8,10 @@ import android.view.Gravity
 import android.view.Window
 import android.view.WindowManager
 import androidx.activity.ComponentDialog
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.graphics.drawable.toDrawable
@@ -28,7 +24,7 @@ import cn.nizou.sxd.ui.theme.AutoOralTheme
 import cn.nizou.sxd.util.StringRes
 
 /**
- * 宿主注入面板（对齐 WeKit `showPanelDialog`：底部弹出 + 点外关闭）。
+ * 宿主注入面板（对齐 WeKit `SettingsActivity`：**全屏** Compose 设置菜单）。
  *
  * 崩溃根因修复（问题 1「注入菜单打不开」）：旧实现把 `ComposeView` 直接 addView 到宿主
  * SettingsActivity 的 decorView 上，Compose 在 onAttachedToWindow 时从 view 树向上找
@@ -40,10 +36,10 @@ import cn.nizou.sxd.util.StringRes
  * ComponentDialog 自身即 LifecycleOwner，ComposeView 在独立 window 里能正常解析 composition
  * context，不再依赖宿主 DecorView 的 lifecycle。这是 wekit 注入微信 Compose 面板的成熟做法。
  *
- * 本版再把 window 对齐 WeKit `showPanelDialog`：
- *  - gravity = BOTTOM（从底部弹出）；
- *  - 透明背景 + FLAG_DIM_BEHIND(0.3) 压暗宿主；
- *  - 内容区占窗口下 65% 高度，外层 Box 点空白即关闭（内容区自身拦截点击）。
+ * 本版对齐 WeKit `SettingsActivity` 的注入设置菜单形态：
+ *  - **全屏**（不再半屏 0.65f）：注入菜单 = 4 tab pager（首页/功能/日志/设置）+ 悬浮底栏，
+ *    与 wekit 设置菜单一致；
+ *  - 内容区占满整个窗口，关闭走 pager 页返回键 / BackHandler。
  */
 class HostComposePanel private constructor(
     private val dialog: ComponentDialog
@@ -55,7 +51,7 @@ class HostComposePanel private constructor(
     }
 
     companion object {
-        /** 在宿主 SettingsActivity 底部弹出 Compose 设置面板（独立 window）。 */
+        /** 在宿主 SettingsActivity 全屏显示 Compose 设置面板（独立 window）。 */
         fun showSettings(activity: Activity): HostComposePanel =
             showPanel(activity) { onDismiss ->
                 SettingsPanel(
@@ -98,13 +94,11 @@ class HostComposePanel private constructor(
                     isAppearanceLightStatusBars = !isDark
                     isAppearanceLightNavigationBars = !isDark
                 }
-                addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                setDimAmount(0.3f)
                 setSoftInputMode(
                     WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
                         WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN,
                 )
-                attributes = attributes.apply { gravity = Gravity.BOTTOM }
+                attributes = attributes.apply { gravity = Gravity.TOP }
             }
             dialog.setCancelable(true)
 
@@ -114,30 +108,13 @@ class HostComposePanel private constructor(
                 setViewTreeSavedStateRegistryOwner(dialog)
                 setContent {
                     AutoOralTheme {
-                        // showPanelDialog 式：全屏点外关闭；内容区占下 65% 高，内部拦截点击避免误关。
+                        // 全屏设置菜单（对齐 wekit SettingsActivity），关闭由 pager 返回键处理。
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .imePadding()
-                                .clickable(
-                                    indication = null,
-                                    interactionSource = null,
-                                    onClick = { dialog.dismiss() },
-                                ),
-                            contentAlignment = Alignment.BottomCenter,
+                                .imePadding(),
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .fillMaxHeight(0.65f)
-                                    .clickable(
-                                        indication = null,
-                                        interactionSource = null,
-                                        onClick = {},
-                                    ),
-                            ) {
-                                content { dialog.dismiss() }
-                            }
+                            content { dialog.dismiss() }
                         }
                     }
                 }

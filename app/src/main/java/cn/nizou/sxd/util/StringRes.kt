@@ -6,42 +6,56 @@ import cn.nizou.sxd.R
 import cn.nizou.sxd.XposedInit
 
 class StringRes(private val resources: Resources) {
-    val KEY_ALWAYS_TRUE_ANSWER = resources.getString(R.string.key_always_true_answer)
-    val KEY_DOUBLE_NICKNAME_LENGTH = resources.getString(R.string.key_double_nickname_length)
-    val KEY_REMOVE_RESTRICTION_ON_NICKNAME = resources.getString(R.string.key_remove_restriction_on_nickname)
-    val KEY_AUTO_HONOR = resources.getString(R.string.key_auto_honor)
-    val KEY_AUTO_PRACTICE = resources.getString(R.string.key_auto_practice)
-    val KEY_AUTO_PRACTICE_QUICK = resources.getString(R.string.key_auto_practice_quick)
-    val KEY_AUTO_PRACTICE_CYCLIC = resources.getString(R.string.key_auto_practice_cyclic)
-    val KEY_AUTO_PRACTICE_CYCLIC_INTERVAL = resources.getString(R.string.key_auto_practice_cyclic_interval)
-    val KEY_AUTO_ANSWER_CONFIG = resources.getString(R.string.key_auto_answer_config)
-    val KEY_CUSTOM_ANSWER_CONFIG = resources.getString(R.string.key_custom_answer_config)
-    val KEY_QUICK_MODE_MUST_WIN = resources.getString(R.string.key_quick_mode_must_win)
-    val KEY_QUICK_MODE_INTERVAL = resources.getString(R.string.key_quick_mode_interval)
-    val KEY_PK_CYCLIC = resources.getString(R.string.key_pk_cyclic)
-    val KEY_PK_CYCLIC_INTERVAL = resources.getString(R.string.key_pk_cyclic_interval)
-    val KEY_GITHUB = resources.getString(R.string.key_github)
-    val KEY_VERSION = resources.getString(R.string.key_version)
-    val KEY_GOTO_SETTINGS = resources.getString(R.string.key_goto_settings)
-    val KEY_DEBUG = resources.getString(R.string.key_debug)
-    val KEY_MODIFY_ANSWER = resources.getString(R.string.key_modify_answer)
-    val KEY_MODIFY_TITLE = resources.getString(R.string.key_modify_title)
-    val KEY_SIMIAN_MODE = resources.getString(R.string.key_simian_mode)
-    val KEY_CUSTOM_ANSWERS = resources.getString(R.string.key_custom_answers)
-    val KEY_CUSTOM_TITLE = resources.getString(R.string.key_custom_title)
-    val KEY_PRACTICE_ANSWER = resources.getString(R.string.key_practice_answer)
-    val KEY_VIP = resources.getString(R.string.key_vip)
-    val KEY_PACKET_CAPTURE = resources.getString(R.string.key_packet_capture)
-    val KEY_PACKET_REWRITE = resources.getString(R.string.key_packet_rewrite)
-    val KEY_PACKET_WRITE_FILE = resources.getString(R.string.key_packet_write_file)
-    val KEY_REWRITE_RULES = resources.getString(R.string.key_rewrite_rules)
-    val KEY_BLOCK_RISK_DETECT = resources.getString(R.string.key_block_risk_detect)
-    val KEY_BLOCK_SUPERVISION = resources.getString(R.string.key_block_supervision)
+    val KEY_ALWAYS_TRUE_ANSWER = resString(R.string.key_always_true_answer)
+    val KEY_DOUBLE_NICKNAME_LENGTH = resString(R.string.key_double_nickname_length)
+    val KEY_REMOVE_RESTRICTION_ON_NICKNAME = resString(R.string.key_remove_restriction_on_nickname)
+    val KEY_AUTO_HONOR = resString(R.string.key_auto_honor)
+    val KEY_AUTO_PRACTICE = resString(R.string.key_auto_practice)
+    val KEY_AUTO_PRACTICE_QUICK = resString(R.string.key_auto_practice_quick)
+    val KEY_AUTO_PRACTICE_CYCLIC = resString(R.string.key_auto_practice_cyclic)
+    val KEY_AUTO_PRACTICE_CYCLIC_INTERVAL = resString(R.string.key_auto_practice_cyclic_interval)
+    val KEY_AUTO_ANSWER_CONFIG = resString(R.string.key_auto_answer_config)
+    val KEY_CUSTOM_ANSWER_CONFIG = resString(R.string.key_custom_answer_config)
+    val KEY_QUICK_MODE_MUST_WIN = resString(R.string.key_quick_mode_must_win)
+    val KEY_QUICK_MODE_INTERVAL = resString(R.string.key_quick_mode_interval)
+    val KEY_PK_CYCLIC = resString(R.string.key_pk_cyclic)
+    val KEY_PK_CYCLIC_INTERVAL = resString(R.string.key_pk_cyclic_interval)
+    val KEY_GITHUB = resString(R.string.key_github)
+    val KEY_VERSION = resString(R.string.key_version)
+    val KEY_GOTO_SETTINGS = resString(R.string.key_goto_settings)
+    val KEY_DEBUG = resString(R.string.key_debug)
+    val KEY_MODIFY_ANSWER = resString(R.string.key_modify_answer)
+    val KEY_MODIFY_TITLE = resString(R.string.key_modify_title)
+    val KEY_SIMIAN_MODE = resString(R.string.key_simian_mode)
+    val KEY_CUSTOM_ANSWERS = resString(R.string.key_custom_answers)
+    val KEY_CUSTOM_TITLE = resString(R.string.key_custom_title)
+    val KEY_PRACTICE_ANSWER = resString(R.string.key_practice_answer)
+    val KEY_VIP = resString(R.string.key_vip)
+    val KEY_PACKET_CAPTURE = resString(R.string.key_packet_capture)
+    val KEY_PACKET_REWRITE = resString(R.string.key_packet_rewrite)
+    val KEY_PACKET_WRITE_FILE = resString(R.string.key_packet_write_file)
+    val KEY_REWRITE_RULES = resString(R.string.key_rewrite_rules)
+    val KEY_BLOCK_RISK_DETECT = resString(R.string.key_block_risk_detect)
+    val KEY_BLOCK_SUPERVISION = resString(R.string.key_block_supervision)
+
+    /** 容错读字符串：模块资源不可用（回退到系统资源）时返回资源名，避免崩溃。 */
+    private fun resString(id: Int): String =
+        try {
+            resources.getString(id)
+        } catch (_: Throwable) {
+            // 资源名不可得时用资源 id 的十六进制表示，保证 prefs 键唯一且稳定
+            "res_$id"
+        }
 
     /** 按 key 字符串取同名 R.string 的值（供 SettingsPrefs 通用读写） */
-    fun keyValue(name: String): String = resources.getString(
-        resources.getIdentifier(name, "string", BuildConfig.APPLICATION_ID)
-    )
+    fun keyValue(name: String): String =
+        try {
+            resources.getString(
+                resources.getIdentifier(name, "string", BuildConfig.APPLICATION_ID)
+            )
+        } catch (_: Throwable) {
+            name
+        }
 }
 
 val moduleStringRes by lazy {

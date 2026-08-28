@@ -8,7 +8,6 @@ import cn.nizou.sxd.MODULE_PREFS_NAME
 import cn.nizou.sxd.hook.BaseHook
 import cn.nizou.sxd.util.HookStatus
 import cn.nizou.sxd.util.XposedHelpers
-import cn.nizou.sxd.util.install
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface
 
@@ -29,7 +28,15 @@ class XposedInit : XposedModule() {
     override fun onModuleLoaded(param: XposedModuleInterface.ModuleLoadedParam) {
         self = this
         modulePath = moduleApplicationInfo.sourceDir
-        moduleRes = createModuleResources(modulePath)
+        // 资源加载必须容错：部分框架版本（如 LSPosed standard）下反射 AssetManager/addAssetPath
+        // 可能受隐藏 API 限制抛异常，导致模块加载失败/宿主闪退。失败时回退 Resources.getSystem()，
+        // 保证 moduleRes 非空（StringRes 依赖它），注入面板仍可渲染。
+        moduleRes = try {
+            createModuleResources(modulePath)
+        } catch (e: Throwable) {
+            Log.e("AutoOral", "createModuleResources failed, fallback system resources", e)
+            Resources.getSystem()
+        }
         HookStatus.markLocalActive()
         log(
             Log.INFO, "AutoOral",
@@ -42,6 +49,13 @@ class XposedInit : XposedModule() {
      * 因此必须同时过滤 package 与 process（等价旧 packageName == processName）。
      * libxposed 的 PackageReadyParam 无 processName 字段，用 isFirstPackage
      * （true 表示当前进程中该包首次就绪）做单次保护，等价旧「主进程」判断。
+     *
+     * 注入策略：hook `Application.attach` —— 它在宿主应用 classLoader 完整创建后才执行，
+     * 此时 findClass 宿主类必然成功（npatch 与 LSPosed standard 均适用）。此前在
+     * onPackageReady 直接 hook 会因部分框架版本 classLoader 未就绪而静默失败（异常被
+     * BaseHook.startHookCatching 吞掉），故统一走 attach hook。native 库（libauto_oral）
+     * 改为首次使用时懒加载（见 util/Strokes.kt），避免 System.load 与框架 native 加载
+     * 窗口冲突 abort 进程。
      */
     override fun onPackageReady(param: XposedModuleInterface.PackageReadyParam) {
         if (param.packageName != HOST_PACKAGE_NAME) return
@@ -53,17 +67,7 @@ class XposedInit : XposedModule() {
         } catch (_: Throwable) {
         }
 
-        // 关键修复（问题 1）：onPackageReady 在宿主 classLoader 尚未完全就绪时即被触发
-        // （npatch/LSPosed 在 createOrUpdateClassLoaderLocked 期间调用），此时 findClass
-        // 宿主应用类会抛 ClassNotFoundException。故不在此同步 hook，改为 hook
-        // Application.attach —— 它在宿主应用 classLoader 完整创建后才执行，届时再 hook。
-        // 注意：install()（加载 native libauto_oral）也必须延后到 attach 后执行——
-        // onPackageReady 早期 System.load 会与宿主 npatch 的 native 加载流程冲突
-        // （JNI GetObjectClass(null) 崩溃，真机 3.140.1 已复现）。
-        hookAfterAppAttach(param.classLoader)
-    }
-
-    private fun hookAfterAppAttach(appClassLoader: ClassLoader) {
+        val appClassLoader = param.classLoader
         try {
             val appClass = XposedHelpers.findClass("android.app.Application", appClassLoader)
             val attach = appClass.getDeclaredMethod("attach", android.content.Context::class.java)
@@ -71,8 +75,6 @@ class XposedInit : XposedModule() {
             hook(attach).setId("app_attach").intercept { chain ->
                 val r = chain.proceed()
                 try {
-                    // classLoader 就绪后再加载 native 库（避免与 npatch 加载冲突）
-                    install()
                     BaseHook.startHook(this, appClassLoader)
                 } catch (e: Throwable) {
                     Log.e("AutoOral", "hook after attach failed", e)
@@ -80,13 +82,7 @@ class XposedInit : XposedModule() {
                 r
             }
         } catch (e: Throwable) {
-            Log.e("AutoOral", "hookAfterAppAttach setup failed, fallback direct", e)
-            try {
-                install()
-                BaseHook.startHook(this, appClassLoader)
-            } catch (e2: Throwable) {
-                Log.e("AutoOral", "fallback hook failed", e2)
-            }
+            Log.e("AutoOral", "attach hook setup failed", e)
         }
     }
 
