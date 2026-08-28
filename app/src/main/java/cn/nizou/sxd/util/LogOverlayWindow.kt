@@ -162,7 +162,7 @@ object LogOverlayWindow {
             private var lpY = 0
             override fun onTouch(v: View, event: MotionEvent): Boolean {
                 val w = d.window ?: return false
-                when (event.actionMasked) {
+                return when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         startX = event.rawX
                         startY = event.rawY
@@ -226,7 +226,7 @@ object LogOverlayWindow {
                 private var lpX = 0
                 private var lpY = 0
                 override fun onTouch(v: View, event: MotionEvent): Boolean {
-                    when (event.actionMasked) {
+                    return when (event.actionMasked) {
                         MotionEvent.ACTION_DOWN -> {
                             startX = event.rawX; startY = event.rawY
                             lpX = w.attributes.x; lpY = w.attributes.y

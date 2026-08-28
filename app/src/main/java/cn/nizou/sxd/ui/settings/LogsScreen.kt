@@ -37,7 +37,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.DropdownMenuItemDefaults
 import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -262,17 +261,11 @@ fun LogsScreen(
                             DropdownMenuPopup(
                                 expanded = menuExpanded,
                                 onDismissRequest = { menuExpanded = false },
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                             ) {
-                                // 菜单项显式背景：避免透明不可见（UI 修复）
-                                val menuItemColors = DropdownMenuItemDefaults.colors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    contentColor = MaterialTheme.colorScheme.onSurface,
-                                )
+                                // M3 菜单默认带 surface 背景；顶部操作按钮背景见 actions（已加 surfaceVariant 圆底）
                                 DropdownMenuItem(
                                     text = { Text("刷新") },
                                     leadingIcon = { Icon(MaterialSymbols.Outlined.Refresh, null) },
-                                    colors = menuItemColors,
                                     onClick = {
                                         menuExpanded = false
                                         requestRefresh(kind, fromPull = false)
@@ -281,7 +274,6 @@ fun LogsScreen(
                                 DropdownMenuItem(
                                     text = { Text("清除") },
                                     leadingIcon = { Icon(MaterialSymbols.Outlined.Delete_sweep, null) },
-                                    colors = menuItemColors,
                                     onClick = {
                                         menuExpanded = false
                                         scope.launch {
