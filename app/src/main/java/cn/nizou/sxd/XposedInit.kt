@@ -47,8 +47,6 @@ class XposedInit : XposedModule() {
         if (param.packageName != HOST_PACKAGE_NAME) return
         if (!param.isFirstPackage) return
 
-        install() // 加载 native libauto_oral（绝对路径）
-
         // 跨进程激活标记：hook 成功后写入 RemotePreferences，供模块设置页读取（问题 3 修复）。
         try {
             HookStatus.markActive(getRemotePreferences(MODULE_PREFS_NAME))
@@ -59,6 +57,9 @@ class XposedInit : XposedModule() {
         // （npatch/LSPosed 在 createOrUpdateClassLoaderLocked 期间调用），此时 findClass
         // 宿主应用类会抛 ClassNotFoundException。故不在此同步 hook，改为 hook
         // Application.attach —— 它在宿主应用 classLoader 完整创建后才执行，届时再 hook。
+        // 注意：install()（加载 native libauto_oral）也必须延后到 attach 后执行——
+        // onPackageReady 早期 System.load 会与宿主 npatch 的 native 加载流程冲突
+        // （JNI GetObjectClass(null) 崩溃，真机 3.140.1 已复现）。
         hookAfterAppAttach(param.classLoader)
     }
 
@@ -70,6 +71,8 @@ class XposedInit : XposedModule() {
             hook(attach).setId("app_attach").intercept { chain ->
                 val r = chain.proceed()
                 try {
+                    // classLoader 就绪后再加载 native 库（避免与 npatch 加载冲突）
+                    install()
                     BaseHook.startHook(this, appClassLoader)
                 } catch (e: Throwable) {
                     Log.e("AutoOral", "hook after attach failed", e)
@@ -79,6 +82,7 @@ class XposedInit : XposedModule() {
         } catch (e: Throwable) {
             Log.e("AutoOral", "hookAfterAppAttach setup failed, fallback direct", e)
             try {
+                install()
                 BaseHook.startHook(this, appClassLoader)
             } catch (e2: Throwable) {
                 Log.e("AutoOral", "fallback hook failed", e2)
