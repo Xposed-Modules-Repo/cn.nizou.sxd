@@ -142,8 +142,17 @@ class WebViewHook(
             val str = chain.getArg(0).toString()
             when {
                 str.startsWith("javascript:") -> Unit
+                // 3.94-3.13x 旧版 PK 对战页
                 str.contains("/bh5/leo-web-oral-pk/exercise.html") -> {
                     logI("exercise.html loaded")
+                    hookConsoleLog()
+                    pkPageLoaded.set(true)
+                }
+
+                // 3.140+ 新版 PK 对战页（leo-web-math-exercise 本地 bundle，Vue2.7）
+                str.contains("leo-web-math-exercise/animation-oral.html") ||
+                    str.contains("leo-web-oral-pk/animation-oral.html") -> {
+                    logI("animation-oral.html loaded")
                     hookConsoleLog()
                     pkPageLoaded.set(true)
                 }
@@ -215,9 +224,8 @@ class WebViewHook(
 
                 AutoAnswerMode.DISABLE -> ""
             }
-            // 秒结算：先注入环境加速（CSS 动画 0s/音效静音/自动画线/跳题 0ms），再注入答题 JS。
-            // 移植自 ExElectron/Xiaoyuan_Kousuan_2026 的 7 大 patch（运行时版）。
-            if (PK.pkFastSettle) {
+            // 极速模式 = 秒结算：环境加速（CSS 动画 0s/静音/自动画线/跳题 0ms）+ 秒结算答题。
+            if (mode == AutoAnswerMode.QUICK) {
                 injectJsCode(fastSettleJs, loadUrl, webView)
                 logI("fastsettle injected")
             }

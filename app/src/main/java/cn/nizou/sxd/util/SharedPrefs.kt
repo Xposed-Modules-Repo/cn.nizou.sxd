@@ -110,12 +110,6 @@ object PK {
                 Integer.parseInt(modulePrefs.getString(moduleStringRes.KEY_PK_CYCLIC_INTERVAL, "")!!)
             }.getOrElse { 1500 }
         }
-    /** 秒结算：进局后环境加速（CSS 动画 0s/音效静音/跳题 0ms/判题恒真兜底/跳过识别等待）。 */
-    val pkFastSettle
-        get() = mode in arrayOf(
-            AutoAnswerMode.STANDARD,
-            AutoAnswerMode.QUICK
-        ) && modulePrefs.getBoolean(moduleStringRes.KEY_PK_FAST_SETTLE, false)
 }
 
 object Debug {
