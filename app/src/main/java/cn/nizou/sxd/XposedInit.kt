@@ -8,6 +8,7 @@ import cn.nizou.sxd.MODULE_PREFS_NAME
 import cn.nizou.sxd.hook.BaseHook
 import cn.nizou.sxd.util.HookStatus
 import cn.nizou.sxd.util.XposedHelpers
+import cn.nizou.sxd.util.crash.JavaCrashHandler
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface
 
@@ -28,6 +29,10 @@ class XposedInit : XposedModule() {
     override fun onModuleLoaded(param: XposedModuleInterface.ModuleLoadedParam) {
         self = this
         modulePath = moduleApplicationInfo.sourceDir
+        // 崩溃捕获：onModuleLoaded 在每个被注入进程（宿主主/子进程）都会触发，统一安装；
+        // 模块独立进程由 MainActivity 补装。失败不影响模块启动。
+        runCatching { JavaCrashHandler.install() }
+            .onFailure { Log.e("AutoOral", "JavaCrashHandler.install failed", it) }
         // 资源加载必须容错：部分框架版本（如 LSPosed standard）下反射 AssetManager/addAssetPath
         // 可能受隐藏 API 限制抛异常，导致模块加载失败/宿主闪退。失败时回退 Resources.getSystem()，
         // 保证 moduleRes 非空（StringRes 依赖它），注入面板仍可渲染。

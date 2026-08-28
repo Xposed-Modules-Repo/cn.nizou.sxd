@@ -19,8 +19,10 @@ fun logI(vararg infos: Any) {
             Log.e(TAG, "", throwable)
         }
         // 写入内存环形缓冲，供实时日志悬浮窗渲染
-        LogBuffer.add(
-            if (throwable != null) "${it} :: ${throwable.message}" else it.toString()
-        )
+        val text = if (throwable != null) "${it} :: ${throwable.message}" else it.toString()
+        LogBuffer.add(text)
+        // 写入文件（异步 WeLogger，供 LogsScreen 查看）：tag 统一 AutoOral；
+        // Throwable 走 E 级带完整堆栈，普通消息走 I 级（logI 语义）
+        if (throwable != null) WeLogger.e(TAG, text, throwable) else WeLogger.i(TAG, text)
     }
 }

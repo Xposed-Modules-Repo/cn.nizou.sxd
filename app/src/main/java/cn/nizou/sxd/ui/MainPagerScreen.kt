@@ -17,11 +17,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -46,12 +43,12 @@ import cn.nizou.sxd.ui.settings.CustomAnswerScreen
 import cn.nizou.sxd.ui.settings.CustomScoreScreen
 import cn.nizou.sxd.ui.settings.DebugScreen
 import cn.nizou.sxd.ui.settings.GeneralScreen
+import cn.nizou.sxd.ui.settings.LogsScreen
 import cn.nizou.sxd.ui.settings.PkScreen
 import cn.nizou.sxd.ui.settings.PracticeScreen
 import cn.nizou.sxd.ui.settings.SettingsScreen
 import cn.nizou.sxd.ui.theme.AutoOralTheme
 import cn.nizou.sxd.ui.theme.ThemeSettings
-import cn.nizou.sxd.util.LogBuffer
 import cn.nizou.sxd.util.StringRes
 import cn.nizou.sxd.util.openGithub
 import com.composables.icons.materialsymbols.MaterialSymbols
@@ -65,7 +62,6 @@ import com.composables.icons.materialsymbols.outlined.Exposure_plus_1
 import com.composables.icons.materialsymbols.outlined.Home
 import com.composables.icons.materialsymbols.outlined.Info
 import com.composables.icons.materialsymbols.outlined.Open_in_new
-import com.composables.icons.materialsymbols.outlined.Refresh
 import com.composables.icons.materialsymbols.outlined.Settings
 import com.composables.icons.materialsymbols.outlined.Tune
 import com.composables.icons.materialsymbols.outlinedfilled.Article
@@ -115,7 +111,7 @@ sealed interface MainRoute : NavKey {
  *    设备型号 / 安卓版本 / 加载环境）+ GitHub；
  *  - 功能 = 分类菜单（通用/练习/PK/自定义分数/自定义答案/Debug/关于 下钻，entry 压栈 +
  *    LeftToRight 侧滑返回）；
- *  - 日志 = 模块运行日志（LogBuffer 实时）；
+ *  - 日志 = 模块运行/崩溃日志查看页（文件日志，见 ui/settings/LogsScreen.kt）；
  *  - 设置 = SettingsPager 完整设置（wekit 同款：UI 引擎/主题模式/预测返回动画/页面转场动画/
  *    动态壁纸取色/种子取色/调色板样式/颜色规格），见 [SettingsScreen]。
  *  - 悬浮底栏**不做内容底部留白限位**（用户要求，可遮挡内容）。
@@ -241,7 +237,7 @@ private fun MainPager(
                 when (p) {
                     0 -> HomeTab(res, onNavigate = onNavigate, onBack = onBackAtRoot)
                     1 -> FeaturesTab(res, onNavigate = onNavigate, onBack = onBackAtRoot)
-                    2 -> LogsTab(res, onBack = onBackAtRoot)
+                    2 -> LogsScreen(res, onBack = onBackAtRoot)
                     else -> SettingsScreen(onBack = onBackAtRoot)
                 }
             }
@@ -419,49 +415,9 @@ private fun FeaturesTab(
 }
 
 // ---------------------------------------------------------------------------
-//  Page 2 — 日志（LogBuffer 实时日志）
+//  Page 2 — 日志（完整日志查看页见 ui/settings/LogsScreen.kt：运行/崩溃双 tab +
+//  文件下拉选择 + 分享/保存/刷新/清除 + 下拉刷新 + 滚顶滚底，对齐 wekit LogsPager）
 // ---------------------------------------------------------------------------
-
-@Composable
-private fun LogsTab(
-    res: StringRes,
-    onBack: () -> Unit,
-) {
-    var refresh by remember { mutableStateOf(0) }
-    val logs = remember(refresh) { LogBuffer.snapshot() }
-
-    M3ListScaffold(
-        title = "日志",
-        navigationIcon = { M3BackButton(onClick = onBack) },
-    ) {
-        item {
-            BaseWidget(
-                title = "刷新日志",
-                description = "共 ${logs.size} 条（环形缓冲容量 ${LogBuffer.CAPACITY}）",
-                onClick = { refresh++ },
-                trailingContent = {
-                    Icon(
-                        imageVector = MaterialSymbols.Outlined.Refresh,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp),
-                    )
-                },
-            )
-        }
-        item {
-            SegmentedColumn(title = "运行日志") {
-                if (logs.isEmpty()) {
-                    BaseWidget(title = "暂无日志", description = "模块运行后自动写入")
-                } else {
-                    logs.forEach { line ->
-                        BaseWidget(title = line, description = null)
-                    }
-                }
-            }
-        }
-    }
-}
 
 // ---------------------------------------------------------------------------
 //  Page 3 — 设置（完整 SettingsPager，wekit 同款，见 ui/settings/SettingsScreen.kt）
