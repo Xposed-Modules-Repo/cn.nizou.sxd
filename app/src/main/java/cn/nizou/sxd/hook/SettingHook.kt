@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.util.AttributeSet
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.LinearLayout.LayoutParams
@@ -93,7 +94,13 @@ class SettingHook(
         val lifecycleOwnerKtClass = findClass(Classname.LIFECYCLE_OWNER_KT)
         val settingsActivityClass = findClass(Classname.SETTINGS_ACTIVITY)
         val sectionItemClass = findClass(Classname.SECTION_ITEM)
-        val sectionItemConstructor = sectionItemClass.getConstructor(Context::class.java)
+        // 新版(3.140+) LeoSectionItemCell 已删除单参构造器，仅剩 (Context, AttributeSet) /
+        // (Context, AttributeSet, int)。优先双参构造器（兼容单参旧版，单参存在时用它）。
+        val sectionItemConstructor: Constructor<*> = try {
+            sectionItemClass.getConstructor(Context::class.java, AttributeSet::class.java)
+        } catch (_: NoSuchMethodException) {
+            sectionItemClass.getConstructor(Context::class.java)
+        }
         settingsActivityClass.findMethod("onCreate", Bundle::class.java)
             .intercept("settings_onCreate") { chain ->
                 val r = chain.proceed()
@@ -145,7 +152,12 @@ class SettingHook(
         itemConstructor: Constructor<*>,
         labelId: Int
     ): View {
-        val item = itemConstructor.newInstance(activity) as View
+        // 双参构造器需要 (Context, AttributeSet)；单参构造器只传 Context。
+        val item = if (itemConstructor.parameterCount >= 2) {
+            itemConstructor.newInstance(activity, null as AttributeSet?) as View
+        } else {
+            itemConstructor.newInstance(activity) as View
+        }
         return buildSectionItem(item, labelId, "老挂戏老叟设置") {
             HostComposePanel.showSettings(activity)
         }

@@ -3,6 +3,7 @@ package cn.nizou.sxd.hook
 import android.util.Base64
 import cn.nizou.sxd.Classname
 import cn.nizou.sxd.util.Simian
+import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.logI
 import io.github.libxposed.api.XposedInterface
 import org.json.JSONArray
@@ -95,9 +96,16 @@ class SimianHook(
 
     // ---- 2. JsBridgeBean$a 构造器：recognize 识别结果改写 ----
     private fun hookJsBridgeBeanA() {
-        val jsBridgeBeanAClass = findClass(Classname.JS_BRIDGE_BEAN_A)
+        // 新版(3.140+) JsBridgeBean 已迁移/重构（旧 common.webview.base.JsBridgeBean$a 消失），
+        // 类不存在时优雅跳过，不影响 EncryptResult/QuestionVO/VIP hook。
+        val jsBridgeBeanAClass =
+            XposedHelpers.findClassIfExists(Classname.JS_BRIDGE_BEAN_A, classLoader)
+                ?: return logI("SimianHook: JsBridgeBean\$a not found in host, skip jsbridge hook")
+        val jsBridgeBaseClass =
+            XposedHelpers.findClassIfExists(Classname.JS_BRIDGE_BASE, classLoader)
+                ?: return logI("SimianHook: JsBridgeBase not found in host, skip jsbridge hook")
         jsBridgeBeanAClass.findConstructor(
-            findClass(Classname.JS_BRIDGE_BASE),
+            jsBridgeBaseClass,
             String::class.java,
             String::class.java
         ).intercept("simian_js_bridge_bean_a") { chain ->

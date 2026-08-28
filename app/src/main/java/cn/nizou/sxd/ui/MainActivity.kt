@@ -9,9 +9,9 @@ import cn.nizou.sxd.util.StringRes
 /**
  * 独立模块 UI 入口（launcher / MODULE_SETTINGS）。Compose 单 Activity。
  *
- * 模块本体（独立 App）：`ModuleMainScreen` 用 `HorizontalPager` + `FloatingBottomBar`
- * 悬浮胶囊底栏切换分类，首页为「功能菜单列表」（激活检测卡片 + GitHub + 分类下钻），
- * 与注入宿主面板（cn.nizou.sxd.ui.host.SettingsPanel）分离，复用同一批详情 Composable。
+ * 模块本体（独立 App）：`ModuleMainScreen` 为「简单启动器页」（激活卡片 + 打开宿主 +
+ * 打开模块设置 + GitHub 链接），不含模块内部功能。模块全部功能仅保留在注入宿主面板
+ * （cn.nizou.sxd.ui.host.SettingsPanel / MainPagerScreen）。
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

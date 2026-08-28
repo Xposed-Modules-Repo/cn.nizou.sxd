@@ -2,6 +2,8 @@ package cn.nizou.sxd.hook
 
 import cn.nizou.sxd.Classname
 import cn.nizou.sxd.util.Common
+import cn.nizou.sxd.util.XposedHelpers
+import cn.nizou.sxd.util.logI
 import io.github.libxposed.api.XposedInterface
 
 class RecognizerHook(
@@ -13,7 +15,10 @@ class RecognizerHook(
         get() = "RecognizerHook"
 
     override fun startHook() {
-        val mathScriptRecognizerClass = findClass(Classname.MATH_SCRIPT_RECOGNIZER)
+        // 新版(3.140+) 已移除 MathScriptRecognizer（识别逻辑重构），类不存在时优雅跳过。
+        val mathScriptRecognizerClass =
+            XposedHelpers.findClassIfExists(Classname.MATH_SCRIPT_RECOGNIZER, classLoader)
+                ?: return logI("RecognizerHook: MathScriptRecognizer not found in host, skip")
         mathScriptRecognizerClass.findMethod(
             "a",
             Int::class.javaPrimitiveType!!,

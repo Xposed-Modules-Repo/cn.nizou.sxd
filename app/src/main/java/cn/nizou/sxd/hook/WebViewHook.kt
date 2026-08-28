@@ -100,7 +100,10 @@ class WebViewHook(
     }
 
     override fun startHook() {
-        val baseWebAppClass = findClass(Classname.BASE_WEB_APP)
+        // 新版(3.140+) 已移除 vgo BaseWebApp（WebView 架构重构为 kanyun H5BaseWebApp 等），
+        // 类不存在时优雅跳过 WebView 注入。
+        val baseWebAppClass = XposedHelpers.findClassIfExists(Classname.BASE_WEB_APP, classLoader)
+            ?: return logI("WebViewHook: BaseWebApp not found in host, skip webview hooks")
         val simpleWebAppFireworkClass =
             findClass(Classname.SIMPLE_WEB_APP_FIREWORK_ACTIVITY)
         val webViewField =

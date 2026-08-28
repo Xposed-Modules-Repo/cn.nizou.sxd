@@ -132,7 +132,10 @@ class PracticeHook(
     }
 
     private fun hookQuickExercisePresenter(quickExerciseActivityClass: Class<*>) {
-        val quickExercisePresenterClass = findClass(Classname.PRESENTER)
+        // 新版(3.140+) 已移除 QuickExercisePresenter（自动答题重构），类不存在时跳过该功能。
+        val quickExercisePresenterClass =
+            XposedHelpers.findClassIfExists(Classname.PRESENTER, classLoader)
+                ?: return logI("PracticeHook: QuickExercisePresenter not found in host, skip presenter hooks")
         val presenterWrapper = QuickExercisePresenterWrapper(quickExercisePresenterClass)
         val performNext = Runnable {
             if (Practice.autoPractice) {
