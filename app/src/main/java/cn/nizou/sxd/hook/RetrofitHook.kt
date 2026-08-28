@@ -94,7 +94,7 @@ class RetrofitHook(
                     UserInfoStore.updateFromJson(text)
                 }
             }
-        } catch (_: Throwable) {
+        }.onFailure {
             // 用户信息采集属可选功能，失败静默，不打扰正常请求
         }
 
