@@ -236,7 +236,7 @@ fun LogsScreen(
                                 if (file == null) {
                                     Toast.makeText(context, "暂无日志可保存", Toast.LENGTH_SHORT).show()
                                 } else if (saveLauncher != null) {
-                                    val launcher = saveLauncher
+                                    val launcher = saveLauncher!!
                                     saveTargetFile = file
                                     launcher.launch(file.name)
                                 } else {
