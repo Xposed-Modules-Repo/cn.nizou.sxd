@@ -13,6 +13,7 @@
     <string name="key_quick_mode_interval">quick_mode_interval</string>
     <string name="key_pk_cyclic">pk_cyclic</string>
     <string name="key_pk_cyclic_interval">pk_cyclic_interval</string>
+    <string name="key_pk_fast_settle">pk_fast_settle</string>
     <string name="key_github">github</string>
     <string name="key_version">version</string>
     <string name="key_goto_settings">goto_settings</string>

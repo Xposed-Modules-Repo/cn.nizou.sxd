@@ -46,6 +46,9 @@ fun PkScreen(res: StringRes, onBack: () -> Unit) {
     var pkCyclicInterval by remember {
         mutableStateOf(SettingsPrefs.readString(res, res.KEY_PK_CYCLIC_INTERVAL, "1500"))
     }
+    var pkFastSettle by remember {
+        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_PK_FAST_SETTLE, false))
+    }
 
     val mode = AutoAnswerMode.entries.getOrElse(autoAnswerConfigIndex) { AutoAnswerMode.DISABLE }
 
@@ -116,6 +119,16 @@ fun PkScreen(res: StringRes, onBack: () -> Unit) {
                     onValueChange = {
                         pkCyclicInterval = it
                         SettingsPrefs.writeString(res, res.KEY_PK_CYCLIC_INTERVAL, it)
+                    }
+                )
+                SwitchWidget(
+                    title = "秒结算",
+                    description = "进局环境加速：动画0s/静音/自动画线/跳题0ms（移植 2026 秒答题方案）",
+                    enabled = mode == AutoAnswerMode.QUICK || mode == AutoAnswerMode.STANDARD,
+                    checked = pkFastSettle,
+                    onCheckedChange = {
+                        pkFastSettle = it
+                        SettingsPrefs.writeBoolean(res, res.KEY_PK_FAST_SETTLE, it)
                     }
                 )
             }

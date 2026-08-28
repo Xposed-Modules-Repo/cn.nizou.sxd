@@ -49,6 +49,11 @@ class WebViewHook(
             .bufferedReader().use { it.readText() }
     }
 
+    private val fastSettleJs by lazy {
+        moduleRes.assets.open("js/fastsettle.js")
+            .bufferedReader().use { it.readText() }
+    }
+
     private val pkPageLoaded = AtomicBoolean(false)
 
     private val resultPageLoaded = AtomicBoolean(false)
@@ -209,6 +214,12 @@ class WebViewHook(
                 AutoAnswerMode.STANDARD -> standardJs
 
                 AutoAnswerMode.DISABLE -> ""
+            }
+            // 秒结算：先注入环境加速（CSS 动画 0s/音效静音/自动画线/跳题 0ms），再注入答题 JS。
+            // 移植自 ExElectron/Xiaoyuan_Kousuan_2026 的 7 大 patch（运行时版）。
+            if (PK.pkFastSettle) {
+                injectJsCode(fastSettleJs, loadUrl, webView)
+                logI("fastsettle injected")
             }
             if (jsCode.isEmpty()) {
                 logI("自动答题配置: ${mode.value}")

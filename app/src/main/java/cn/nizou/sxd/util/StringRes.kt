@@ -20,6 +20,7 @@ class StringRes(private val resources: Resources) {
     val KEY_QUICK_MODE_INTERVAL = resString(R.string.key_quick_mode_interval)
     val KEY_PK_CYCLIC = resString(R.string.key_pk_cyclic)
     val KEY_PK_CYCLIC_INTERVAL = resString(R.string.key_pk_cyclic_interval)
+    val KEY_PK_FAST_SETTLE = resString(R.string.key_pk_fast_settle)
     val KEY_GITHUB = resString(R.string.key_github)
     val KEY_VERSION = resString(R.string.key_version)
     val KEY_GOTO_SETTINGS = resString(R.string.key_goto_settings)
