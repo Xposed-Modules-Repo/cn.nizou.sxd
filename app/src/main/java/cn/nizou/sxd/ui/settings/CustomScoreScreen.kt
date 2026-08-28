@@ -10,6 +10,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -28,6 +29,8 @@ import cn.nizou.sxd.api.LegacyApiService
 import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.logI
 import cn.nizou.sxd.util.mainHandler
+import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.outlined.Arrow_back
 
 /**
  * 当前分数加载状态机。
@@ -96,7 +99,10 @@ fun CustomScoreScreen(onBack: () -> Unit) {
                 title = { Text("自定义分数") },
                 navigationIcon = {
                     androidx.compose.material3.IconButton(onClick = onBack) {
-                        Text("‹", style = MaterialTheme.typography.headlineMedium)
+                        Icon(
+                            imageVector = MaterialSymbols.Outlined.Arrow_back,
+                            contentDescription = "返回",
+                        )
                     }
                 }
             )

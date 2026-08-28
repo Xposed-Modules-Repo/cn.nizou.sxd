@@ -12,6 +12,10 @@ lifecycle-runtime = "2.11.0"
 miuix = "0.9.4-rc01"
 # MaterialSymbols 图标（wekit 同款 composablehorizons）
 composablehorizons-symbols = "2.2.1"
+# material-kolor —— 动态配色（wekit 同款 5.0.0）
+materialkolor = "5.0.0"
+# kotlinx-serialization —— miuix-nav rememberNavBackStack saver 需要 @Serializable 路由（wekit 同款 1.11.0）
+serialization = "1.11.0"
 
 [libraries]
 libxposed-api = { module = "io.github.libxposed:api", version.ref = "libxposed" }
@@ -32,9 +36,14 @@ miuix-nav = { module = "top.yukonga.miuix.kmp:miuix-nav-android", version.ref = 
 # --- MaterialSymbols 图标（wekit 同款） ---
 composablehorizons-material-symbols-outlined = { module = "com.composables:icons-material-symbols-outlined-cmp", version.ref = "composablehorizons-symbols" }
 composablehorizons-material-symbols-filled = { module = "com.composables:icons-material-symbols-outlined-filled-cmp", version.ref = "composablehorizons-symbols" }
+# --- material-kolor（wekit 同款动态配色） ---
+materialkolor = { module = "com.materialkolor:material-kolor", version.ref = "materialkolor" }
+# --- kotlinx-serialization（@Serializable 路由，miuix-nav saver 用） ---
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 lsplugin-resopt = { id = "org.lsposed.lsplugin.resopt", version = "1.6" }

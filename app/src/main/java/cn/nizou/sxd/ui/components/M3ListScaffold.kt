@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
@@ -15,6 +16,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
+import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.outlined.Arrow_back
 
 /**
  * 共享列表 Scaffold（照抄 WeKit M3ListScaffold 的骨架，适配 material3 1.2.x）：
@@ -70,11 +73,15 @@ fun M3ListScaffold(
 }
 
 /**
- * 顶部返回按钮（与既有 UI 一致用文本 chevron，避免引入图标库依赖）。
+ * 顶部返回按钮（MaterialSymbols Arrow_back 图标；视觉更重的带底色圆钮见
+ * [ExpressiveBackButton]）。
  */
 @Composable
 fun M3BackButton(onClick: () -> Unit) {
     IconButton(onClick = onClick) {
-        Text("‹", style = MaterialTheme.typography.headlineMedium)
+        Icon(
+            imageVector = MaterialSymbols.Outlined.Arrow_back,
+            contentDescription = "返回",
+        )
     }
 }

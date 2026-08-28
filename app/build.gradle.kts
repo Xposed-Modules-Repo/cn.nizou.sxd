@@ -4,6 +4,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.lsplugin.resopt)
 }
 
@@ -80,6 +81,9 @@ android {
 tasks.withType<KotlinCompile> {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
+        // 对齐 wekit：全局 OptIn Material3 Expressive API（MaterialExpressiveTheme/MotionScheme 等）
+        freeCompilerArgs.add("-opt-in=androidx.compose.material3.ExperimentalMaterial3Api")
+        freeCompilerArgs.add("-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi")
     }
 }
 
@@ -104,4 +108,10 @@ dependencies {
     // --- MaterialSymbols 图标（wekit 同款，悬浮底栏 tab 图标） ---
     implementation(libs.composablehorizons.material.symbols.outlined)
     implementation(libs.composablehorizons.material.symbols.filled)
+
+    // --- material-kolor（wekit 同款动态配色：9 种 PaletteStyle + ColorSpec 2021/2025） ---
+    implementation(libs.materialkolor)
+
+    // --- kotlinx-serialization（@Serializable 路由，miuix-nav rememberNavBackStack saver 用） ---
+    implementation(libs.kotlinx.serialization.json)
 }

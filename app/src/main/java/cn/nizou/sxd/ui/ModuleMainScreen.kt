@@ -3,6 +3,7 @@ package cn.nizou.sxd.ui
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -24,7 +26,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import cn.nizou.sxd.BuildConfig
@@ -33,6 +35,10 @@ import cn.nizou.sxd.ui.components.HookStatusCard
 import cn.nizou.sxd.util.StringRes
 import cn.nizou.sxd.util.openGithub
 import cn.nizou.sxd.util.openSettingsInHostApp
+import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.outlined.Public
+import com.composables.icons.materialsymbols.outlined.Rocket_launch
+import com.composables.icons.materialsymbols.outlined.Settings
 
 /**
  * 模块本体（独立 App）根界面 —— 简单启动器页。
@@ -93,7 +99,7 @@ fun ModuleMainScreen(
 
             // 打开宿主（小猿口算）
             LauncherCard(
-                emoji = "🚀",
+                icon = MaterialSymbols.Outlined.Rocket_launch,
                 title = "打开小猿口算",
                 description = "启动宿主 App 以生效模块功能",
                 onClick = {
@@ -113,7 +119,7 @@ fun ModuleMainScreen(
 
             // 打开模块设置（拉起宿主内注入的设置面板入口，KEY_START_SETTINGS）
             LauncherCard(
-                emoji = "⚙️",
+                icon = MaterialSymbols.Outlined.Settings,
                 title = "打开模块设置",
                 description = "在小猿口算内打开注入的设置面板",
                 onClick = { context.openSettingsInHostApp() }
@@ -126,7 +132,7 @@ fun ModuleMainScreen(
 
             // GitHub 链接
             LauncherCard(
-                emoji = "🌐",
+                icon = MaterialSymbols.Outlined.Public,
                 title = "GitHub",
                 description = "github.com/sxd91/nizou",
                 onClick = { context.openGithub() }
@@ -138,7 +144,7 @@ fun ModuleMainScreen(
 /** 启动器页的可点击卡片（照 WeKit ElevatedCard 结构，用 Surface+clickable 规避实验 API）。 */
 @Composable
 private fun LauncherCard(
-    emoji: String,
+    icon: ImageVector,
     title: String,
     description: String,
     onClick: () -> Unit,
@@ -155,12 +161,17 @@ private fun LauncherCard(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = emoji,
-                style = MaterialTheme.typography.headlineSmall,
-                color = Color.Unspecified,
-                modifier = Modifier.size(40.dp)
-            )
+            Box(
+                modifier = Modifier.size(40.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
             Spacer(Modifier.width(16.dp))
             Column {
                 Text(
