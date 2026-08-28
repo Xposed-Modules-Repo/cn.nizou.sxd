@@ -34,6 +34,12 @@ object SettingsPrefs {
     fun writeString(res: StringRes, key: String, value: String) {
         modulePrefs.edit().putString(key, value).apply()
     }
+
+    fun readInt(key: String, def: Int): Int = modulePrefs.getInt(key, def)
+
+    fun writeInt(key: String, value: Int) {
+        modulePrefs.edit().putInt(key, value).apply()
+    }
 }
 
 object Common {

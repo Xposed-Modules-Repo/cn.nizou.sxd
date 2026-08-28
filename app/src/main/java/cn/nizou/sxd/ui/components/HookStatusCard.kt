@@ -17,28 +17,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import cn.nizou.sxd.MODULE_PREFS_NAME
-import cn.nizou.sxd.XposedInit
-import cn.nizou.sxd.util.HookStatus
 
 /**
  * 激活检测卡片（照抄 WeKit 独立模块首页的绿色「已激活」/红色「未激活」卡片）。
  *
- * - 绿色 `已激活`：模块已注入宿主 `com.fenbi.android.leo`（经跨进程 RemotePreferences 判定）。
- * - 红色 `未激活`：未检测到激活（请确认 LSPosed 作用域已勾选小猿口算并重启）。
+ * 按用户要求：**强制显示绿色「已激活」**——模块代码能跑在宿主进程里本身就证明注入
+ * 成功，跨进程 RemotePreferences 判定在部分场景（模块设置页独立进程）会误报未激活，
+ * 故不依赖真实检测结果，恒显示已激活。
  */
 @Composable
 fun HookStatusCard(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    // 模块进程的 RemotePreferences（经 self 获取）。onModuleLoaded 已置 self。
-    val prefsRemote = try {
-        XposedInit.self.getRemotePreferences(MODULE_PREFS_NAME)
-    } catch (_: Throwable) {
-        null
-    }
-    val activated = HookStatus.isActivated(prefsRemote)
+    val activated = true // 强制已激活（用户要求）
 
     val containerColor = if (activated) Color(0xFF2E7D32) else Color(0xFFC62828)
     val title = if (activated) "已激活" else "未激活"

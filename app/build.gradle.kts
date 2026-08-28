@@ -35,6 +35,9 @@ android {
         versionName = "1.7.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // 构建时间（对齐 WeKit BuildConfig.BUILD_TIMESTAMP，首页设备信息区显示）
+        buildConfigField("long", "BUILD_TIMESTAMP", "${System.currentTimeMillis()}L")
     }
 
     buildTypes {
@@ -98,4 +101,7 @@ dependencies {
     implementation(libs.miuix.blur)
     implementation(libs.miuix.shader)
     implementation(libs.miuix.nav)
+    // --- MaterialSymbols 图标（wekit 同款，悬浮底栏 tab 图标） ---
+    implementation(libs.composablehorizons.material.symbols.outlined)
+    implementation(libs.composablehorizons.material.symbols.filled)
 }

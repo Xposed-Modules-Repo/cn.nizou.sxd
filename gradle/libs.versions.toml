@@ -10,6 +10,8 @@ androidx-core-ktx = "1.19.0"
 lifecycle-runtime = "2.11.0"
 # miuix —— LiquidGlass 悬浮底栏（照抄 wekit，wekit 同款 0.9.4-rc01）
 miuix = "0.9.4-rc01"
+# MaterialSymbols 图标（wekit 同款 composablehorizons）
+composablehorizons-symbols = "2.2.1"
 
 [libraries]
 libxposed-api = { module = "io.github.libxposed:api", version.ref = "libxposed" }
@@ -27,6 +29,9 @@ androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling
 miuix-blur = { module = "top.yukonga.miuix.kmp:miuix-blur-android", version.ref = "miuix" }
 miuix-shader = { module = "top.yukonga.miuix.kmp:miuix-shader-android", version.ref = "miuix" }
 miuix-nav = { module = "top.yukonga.miuix.kmp:miuix-nav-android", version.ref = "miuix" }
+# --- MaterialSymbols 图标（wekit 同款） ---
+composablehorizons-material-symbols-outlined = { module = "com.composables:icons-material-symbols-outlined-cmp", version.ref = "composablehorizons-symbols" }
+composablehorizons-material-symbols-filled = { module = "com.composables:icons-material-symbols-outlined-filled-cmp", version.ref = "composablehorizons-symbols" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
