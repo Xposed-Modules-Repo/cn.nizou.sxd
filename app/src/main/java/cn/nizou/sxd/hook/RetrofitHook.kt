@@ -22,18 +22,21 @@ class RetrofitHook(
 
     override fun startHook() {
         val retrofitClass = findClass(Classname.RETROFIT)
-        val apiServiceClass = findClass(Classname.ORAL_API_SERVICE)
+        // 2026-08-29：对**所有** Retrofit.create 加拦截器（不只 OralApiService）——
+        // 用户信息/cookie 可能来自其它 service（pk/home、user 等）；identity 去重防重复代理。
         retrofitClass.findMethod("create", Class::class.java).intercept("retrofit_create") { chain ->
             val r = chain.proceed()
-            val arg0 = chain.getArg(0)
-            if (arg0 == apiServiceClass) {
-                chain.thisObject?.let(::addInterceptor)
-            }
+            chain.thisObject?.let(::addInterceptor)
             r
         }
     }
 
+    private val patchedRetrofits = java.util.Collections.newSetFromMap(
+        java.util.IdentityHashMap<Any, Boolean>()
+    )
+
     private fun addInterceptor(retrofit: Any) {
+        if (!patchedRetrofits.add(retrofit)) return
         logI("addInterceptor")
         val interceptorClass = findClass(Classname.INTERCEPTOR)
         // FIX: callFactory 本身即 OkHttpClient，直接读其 interceptors 字段，去掉中间 "a" 一步

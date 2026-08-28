@@ -230,29 +230,35 @@ class WebViewHook(
         val loadUrl = loadUrl ?: return
         val webView = webView ?: return
         webView.post {
-            val mode = PK.mode
-            // 答题 JS 配置（mode/自定义答案/自定义正确题数），quick.js 读取；标准模式同样注入。
-            injectAaConfig(loadUrl, webView)
-            val jsCode = when (mode) {
-                // QUICK/STANDARD 统一用通用答题脚本（Vue2/Vue3 双适配，mode 由 __aa_config 区分）；
-                // 标准模式 3.140 前用旧 standard.js（Vue2 专属），在 Vue3 exercise.html 上已失效，废弃。
-                AutoAnswerMode.QUICK -> quickJs
+            // 2026-08-29：整体 try-catch，防止任一环节异常（如 PK.mode 越界）吞掉注入导致
+            // 「注入日志消失/JS 不注入」；任何失败都留痕。
+            try {
+                val mode = PK.mode
+                // 答题 JS 配置（mode/自定义答案/自定义正确题数），quick.js 读取；标准模式同样注入。
+                injectAaConfig(loadUrl, webView)
+                val jsCode = when (mode) {
+                    // QUICK/STANDARD 统一用通用答题脚本（Vue2/Vue3 双适配，mode 由 __aa_config 区分）；
+                    // 标准模式 3.140 前用旧 standard.js（Vue2 专属），在 Vue3 exercise.html 上已失效，废弃。
+                    AutoAnswerMode.QUICK -> quickJs
 
-                AutoAnswerMode.CUSTOM -> PK.customJs
+                    AutoAnswerMode.CUSTOM -> PK.customJs
 
-                AutoAnswerMode.STANDARD -> quickJs
+                    AutoAnswerMode.STANDARD -> quickJs
 
-                AutoAnswerMode.DISABLE -> ""
-            }
-            // 极速模式 = 秒结算：环境加速（CSS 动画 0s/静音/自动画线/跳题 0ms）+ 秒结算答题。
-            if (mode == AutoAnswerMode.QUICK) {
-                injectJsCode(fastSettleJs, loadUrl, webView)
-                logI("fastsettle injected")
-            }
-            if (jsCode.isEmpty()) {
-                logI("自动答题配置: ${mode.value}")
-            } else {
-                injectJsCode(jsCode, loadUrl, webView)
+                    AutoAnswerMode.DISABLE -> ""
+                }
+                // 极速模式 = 秒结算：环境加速（CSS 动画 0s/静音/自动画线/跳题 0ms）+ 秒结算答题。
+                if (mode == AutoAnswerMode.QUICK) {
+                    injectJsCode(fastSettleJs, loadUrl, webView)
+                    logI("fastsettle injected")
+                }
+                if (jsCode.isEmpty()) {
+                    logI("自动答题配置: ${mode.value}")
+                } else {
+                    injectJsCode(jsCode, loadUrl, webView)
+                }
+            } catch (e: Throwable) {
+                logI("injectJs2PkPage failed: ${e.message}")
             }
         }
     }

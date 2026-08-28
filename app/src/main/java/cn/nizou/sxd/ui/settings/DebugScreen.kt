@@ -1,5 +1,6 @@
 package cn.nizou.sxd.ui.settings
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -26,9 +27,10 @@ fun DebugScreen(res: StringRes, onBack: () -> Unit) {
         mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_DEBUG, false))
     }
     val context = LocalContext.current
+    val overlayHost = LogOverlayWindow.isHostProcess(context)
     // 以持久化状态为初值，保证模块本体/宿主面板都能读到真实开关状态
     var logOverlay by remember {
-        mutableStateOf(LogOverlayWindow.isEnabled(context))
+        mutableStateOf(LogOverlayWindow.isEnabled(context) && overlayHost)
     }
     var packetCapture by remember {
         mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_PACKET_CAPTURE, false))
@@ -66,10 +68,20 @@ fun DebugScreen(res: StringRes, onBack: () -> Unit) {
                 )
                 SwitchWidget(
                     title = "实时日志悬浮窗",
-                    description = "显示模块 logI 最近日志，需悬浮窗权限，可随时关闭",
+                    description = if (overlayHost)
+                        "免悬浮窗权限，仅小猿口算内生效，可拖动、可最小化为悬浮球"
+                    else
+                        "仅在小猿口算（宿主）内生效，模块本体不显示",
                     checked = logOverlay,
                     onCheckedChange = {
                         val applied = LogOverlayWindow.setEnabled(context, it)
+                        if (it && !applied) {
+                            Toast.makeText(
+                                context,
+                                if (overlayHost) "悬浮日志启动失败（未找到宿主 Activity）" else "悬浮日志仅在小猿口算内生效",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
                         logOverlay = applied && it
                     }
                 )

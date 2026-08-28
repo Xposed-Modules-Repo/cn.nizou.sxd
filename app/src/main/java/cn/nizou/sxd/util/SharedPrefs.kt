@@ -86,7 +86,8 @@ object PK {
             val index = runCatching {
                 Integer.parseInt(modulePrefs.getString(moduleStringRes.KEY_AUTO_ANSWER_CONFIG, "")!!)
             }.getOrElse { 0 }
-            return AutoAnswerMode.entries[index]
+            // 越界保护：prefs 里残留非法 index 时回退 DISABLE，避免注入/拦截抛异常
+            return AutoAnswerMode.entries.getOrElse(index) { AutoAnswerMode.DISABLE }
         }
     val customJs get() = modulePrefs.getString(moduleStringRes.KEY_CUSTOM_ANSWER_CONFIG, "")!!
     val quickModeMustWin
