@@ -54,6 +54,8 @@ object Classname {
     const val QUESTION_VO = "com.fenbi.android.leo.exercise.data.QuestionVO"
 
     const val USER_VIP_VO = "com.fenbi.android.leo.business.user.vip.UserVipVO"
+
+    const val VIP_RIGHT_INFO_VO = "com.fenbi.android.leo.business.user.vip.VipRightInfoVO"
 }
 
 const val MODULE_PREFS_NAME = "auto_oral_calculation"

@@ -78,6 +78,7 @@ import androidx.compose.ui.unit.sp
 import cn.nizou.sxd.ui.components.BaseItemContainer
 import cn.nizou.sxd.ui.components.DropDownMenuWidget
 import cn.nizou.sxd.ui.components.DropdownOption
+import cn.nizou.sxd.XposedInit
 import cn.nizou.sxd.ui.components.M3BackButton
 import cn.nizou.sxd.util.StringRes
 import cn.nizou.sxd.util.WeLogger
@@ -95,6 +96,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.nio.file.Path
 import java.time.Instant
 import java.time.ZoneId
@@ -104,6 +106,7 @@ import kotlin.io.path.fileSize
 import kotlin.io.path.getLastModifiedTime
 import kotlin.io.path.name
 import kotlin.io.path.readText
+import kotlin.io.path.toFile
 import kotlin.math.log10
 import kotlin.math.pow
 
@@ -205,39 +208,51 @@ fun LogsScreen(
                         scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
                     ),
                     actions = {
-                        IconButton(onClick = {
-                            val file = currentFile
-                            if (file == null) {
-                                Toast.makeText(context, "暂无日志可分享", Toast.LENGTH_SHORT).show()
-                            } else {
-                                scope.launch { shareLogFile(context, file) }
-                            }
-                        }) {
+                        // 按钮背景：图标按钮加 surfaceVariant 圆形底色，避免透明不可见（UI 修复）。
+                        val actionBtnModifier = Modifier
+                            .padding(4.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                        IconButton(
+                            onClick = {
+                                val file = currentFile
+                                if (file == null) {
+                                    Toast.makeText(context, "暂无日志可分享", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    scope.launch { shareLogFile(context, file) }
+                                }
+                            },
+                            modifier = actionBtnModifier,
+                        ) {
                             Icon(
                                 imageVector = MaterialSymbols.Outlined.Share,
                                 contentDescription = "分享",
                             )
                         }
-                        if (saveLauncher != null) {
-                            IconButton(onClick = {
+                        // 保存：宿主面板（ComponentDialog，无 ActivityResultRegistry）也能保存 ——
+                        // 降级为复制到模块 filesDir/log-export/ 并 Toast 完整路径（UI 修复）。
+                        IconButton(
+                            onClick = {
                                 val file = currentFile
-                                val launcher = saveLauncher
                                 if (file == null) {
                                     Toast.makeText(context, "暂无日志可保存", Toast.LENGTH_SHORT).show()
-                                } else if (launcher != null) {
+                                } else if (saveLauncher != null) {
                                     saveTargetFile = file
-                                    launcher.launch(file.name)
+                                    saveLauncher.launch(file.name)
+                                } else {
+                                    scope.launch { saveLogToModuleDir(context, file) }
                                 }
-                            }) {
-                                Icon(
-                                    imageVector = MaterialSymbols.Outlined.Save,
-                                    contentDescription = "保存",
-                                )
-                            }
+                            },
+                            modifier = actionBtnModifier,
+                        ) {
+                            Icon(
+                                imageVector = MaterialSymbols.Outlined.Save,
+                                contentDescription = "保存",
+                            )
                         }
                         // 溢出菜单锚点（照项目 DropDownMenuWidget 的锚点写法）。
                         Box {
-                            IconButton(onClick = { menuExpanded = true }) {
+                            IconButton(onClick = { menuExpanded = true }, modifier = actionBtnModifier) {
                                 Icon(
                                     imageVector = MaterialSymbols.Outlined.More_vert,
                                     contentDescription = "更多",
@@ -285,7 +300,7 @@ fun LogsScreen(
                 ) {
                     TabRow(
                         selectedTabIndex = selectedTab,
-                        containerColor = Color.Transparent,
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
                     ) {
                         LOG_TABS.forEachIndexed { index, tabKind ->
                             Tab(
@@ -515,6 +530,32 @@ private suspend fun shareLogFile(context: Context, file: Path) {
     }
     runCatching { context.startActivity(chooser) }
         .onFailure { WeLogger.e(LOGS_TAG, "failed to launch share chooser", it) }
+}
+
+/**
+ * 宿主面板（ComponentDialog，无 ActivityResultRegistry）下的「保存日志」降级方案：
+ * 把当前日志文件复制到模块自身 dataDir/files/log-export/（宿主进程可读写模块私有目录），
+ * 并 Toast 完整路径。独立模块场景仍优先走系统 CreateDocument 选择器（saveLauncher）。
+ */
+private suspend fun saveLogToModuleDir(context: Context, file: Path) {
+    val savedPath = withContext(Dispatchers.IO) {
+        runCatching {
+            val exportDir = File(
+                XposedInit.self.moduleApplicationInfo.dataDir,
+                "files/log-export"
+            ).apply { mkdirs() }
+            val target = File(exportDir, file.name)
+            file.toFile().inputStream().use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            }
+            target.absolutePath
+        }.getOrNull()
+    }
+    if (savedPath != null) {
+        Toast.makeText(context, "日志已保存：$savedPath", Toast.LENGTH_LONG).show()
+    } else {
+        Toast.makeText(context, "保存日志失败", Toast.LENGTH_SHORT).show()
+    }
 }
 
 // ---------------------------------------------------------------------------

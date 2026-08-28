@@ -4,6 +4,7 @@ import cn.nizou.sxd.Classname
 import cn.nizou.sxd.util.Packet
 import cn.nizou.sxd.util.PacketTool
 import cn.nizou.sxd.util.Practice
+import cn.nizou.sxd.util.UserInfoStore
 import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.logI
 import io.github.libxposed.api.XposedInterface
@@ -80,6 +81,23 @@ class RetrofitHook(
         if (Packet.capture) {
             PacketTool.captureResponse(response!!, fullPath, method, Packet.writeFile)
         }
+
+        // 5) 用户信息 + Cookie 采集（用户信息卡片数据源，peekBody 不消费 body 流）
+        runCatching {
+            if (response != null) {
+                val headers = XposedHelpers.callMethod(response, "headers")
+                val setCookie = XposedHelpers.callMethod(headers, "get", "Set-Cookie") as? String
+                UserInfoStore.updateCookie(setCookie)
+                if (fullPath.contains("user") || fullPath.contains("home") || fullPath.contains("account") || fullPath.contains("profile") || fullPath.contains("pk/home")) {
+                    val body = XposedHelpers.callMethod(response, "peekBody", 1024L * 1024L)
+                    val text = XposedHelpers.callMethod(body, "string") as? String
+                    UserInfoStore.updateFromJson(text)
+                }
+            }
+        }.onFailure {
+            logI("user info capture failed: ${it.message}")
+        }
+
         return response
     }
     /** 把 exams 请求 query 加 isBackground=0。 */

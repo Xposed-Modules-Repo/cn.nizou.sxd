@@ -31,6 +31,7 @@ import cn.nizou.sxd.ui.animation.predictiveback.weKitNavTransition
 import cn.nizou.sxd.ui.components.BaseWidget
 import cn.nizou.sxd.ui.components.HookStatusCard
 import cn.nizou.sxd.ui.components.M3BackButton
+import cn.nizou.sxd.ui.components.UserInfoCard
 import cn.nizou.sxd.ui.components.M3ListScaffold
 import cn.nizou.sxd.ui.components.SegmentedColumn
 import cn.nizou.sxd.ui.content.FloatingBottomBar
@@ -299,6 +300,7 @@ private fun HomeTab(
         navigationIcon = { M3BackButton(onClick = onBack) },
     ) {
         item { HookStatusCard() }
+        item { UserInfoCard() }
         item {
             SegmentedColumn(title = "设备信息") {
                 deviceInfoEntries().forEach { entry ->

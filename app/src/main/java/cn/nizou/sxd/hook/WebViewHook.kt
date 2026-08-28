@@ -11,6 +11,7 @@ import cn.nizou.sxd.XposedInit.Companion.moduleRes
 import cn.nizou.sxd.entities.AutoAnswerMode
 import cn.nizou.sxd.util.Debug
 import cn.nizou.sxd.util.PK
+import cn.nizou.sxd.util.Simian
 import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.currentApplication
 import cn.nizou.sxd.util.logI
@@ -193,11 +194,26 @@ class WebViewHook(
             }
     }
 
+    /** 注入全局配置：`window.$key = $value`（修复旧实现写死 window._$key 字面量、目标键从未被设置的 bug）。 */
     private fun injectConfig(loadUrl: Method, webView: View, key: String, value: Any) {
         invokeOriginal(
             loadUrl,
             webView,
-            arrayOf("javascript: (function(){window._$key=$value;})();")
+            arrayOf("javascript: (function(){window.$key=$value;})();")
+        )
+    }
+
+    /** 答题 JS 配置：`window.__aa_config` = {mode, answer, correctCount}（quick.js 读取）。 */
+    private fun injectAaConfig(loadUrl: Method, webView: View) {
+        val cfg = JSONObject().apply {
+            put("mode", PK.mode.value)
+            put("answer", if (Simian.modifyAnswer) Simian.answers else "")
+            put("correctCount", Simian.customCorrectCount)
+        }.toString()
+        invokeOriginal(
+            loadUrl,
+            webView,
+            arrayOf("javascript:(function(){window.__aa_config=$cfg;})();")
         )
     }
 
@@ -215,6 +231,8 @@ class WebViewHook(
         val webView = webView ?: return
         webView.post {
             val mode = PK.mode
+            // 答题 JS 配置（mode/自定义答案/自定义正确题数），quick.js 读取；标准模式同样注入。
+            injectAaConfig(loadUrl, webView)
             val jsCode = when (mode) {
                 AutoAnswerMode.QUICK -> quickJs
 
@@ -343,7 +361,11 @@ class WebViewHook(
         caller.allMethod("call").forEach { m ->
             m.also { it.isAccessible = true }.intercept("dataEncrypt_call") { chain ->
                 val mode = PK.mode
-                if (!Debug.debug && mode !in arrayOf(AutoAnswerMode.QUICK, AutoAnswerMode.STANDARD)) {
+                val customAnswerOn = Simian.modifyAnswer && Simian.answers.isNotBlank()
+                // 3.140 提交载荷兜底（秒结算/标准/自定义答案的核心）：
+                // 提交包是明文 base64 JSON（costTime 改写已验证可解析），直接写 userAnswer=正确答案 + status=1 + correctCnt，
+                // 服务端按提交包判分 -> 无论前端判题链是否推进，提交结果必为全对（或自定义正确题数）。
+                if (!Debug.debug && mode !in arrayOf(AutoAnswerMode.QUICK, AutoAnswerMode.STANDARD) && !customAnswerOn) {
                     return@intercept chain.proceed()
                 }
                 val bean = chain.getArg(0)
@@ -358,21 +380,47 @@ class WebViewHook(
                 if (!json.has("pkIdStr")) {
                     return@intercept chain.proceed()
                 }
-                if (mode !in arrayOf(AutoAnswerMode.QUICK, AutoAnswerMode.STANDARD)) {
+                if (!Debug.debug && mode !in arrayOf(AutoAnswerMode.QUICK, AutoAnswerMode.STANDARD) && !customAnswerOn) {
                     return@intercept chain.proceed()
                 }
                 runCatching {
                     val questions = json.getJSONArray("questions")
+                    val correctLimit = Simian.customCorrectCount
                     for (i in 0 until questions.length()) {
                         val question = questions.getJSONObject(i)
-                        val answer = question.getString("userAnswer") ?: ""
-                        val pathPoints = answer.pathPoints.toJSONArray()
                         val curTrueAnswer = question.optJSONObject("curTrueAnswer")
+                        // 正确答案来源：question.answer -> answers[0] -> curTrueAnswer.recognizeResult
+                        val correct = question.optString("answer").ifBlank {
+                            runCatching {
+                                question.optJSONArray("answers")?.takeIf { it.length() > 0 }?.getString(0).orEmpty()
+                            }.getOrDefault("").ifBlank {
+                                curTrueAnswer?.optString("recognizeResult").orEmpty()
+                            }
+                        }
+                        val shouldCorrect = correctLimit <= 0 || i < correctLimit
+                        if (shouldCorrect) {
+                            val finalAnswer = if (customAnswerOn) Simian.answers else correct
+                            if (finalAnswer.isNotEmpty()) {
+                                question.put("userAnswer", finalAnswer)
+                                question.put("status", 1)
+                            }
+                        } else {
+                            question.put("status", 0)
+                        }
+                        // 笔迹 pathPoints（保留原逻辑；native 库缺失时为空数组，服务端不校验）
+                        val answer = question.optString("userAnswer")
+                        val pathPoints = answer.pathPoints.toJSONArray()
                         curTrueAnswer?.put("pathPoints", pathPoints)
                         if (question.has("script")) {
                             question.put("script", pathPoints.toString())
                         }
                     }
+                    // correctCnt 按 status==1 统计（自定义正确题数生效）
+                    var correctCnt = 0
+                    for (i in 0 until questions.length()) {
+                        if (questions.getJSONObject(i).optInt("status") == 1) correctCnt++
+                    }
+                    json.put("correctCnt", correctCnt)
                     val questionCnt = json.getInt("questionCnt")
                     if (mode == AutoAnswerMode.QUICK) {
                         val appropriateCostTime = appropriateCostTime.get()
@@ -381,8 +429,10 @@ class WebViewHook(
                         } else {
                             getSimulateCostTime(questionCnt).coerceAtLeast(questionCnt * 200L)
                         }
-                        logI("originCostTime: ${json.get("costTime")}, costTime: $costTime")
+                        logI("originCostTime: ${json.get("costTime")}, costTime: $costTime, correctCnt: $correctCnt/$questionCnt")
                         json.put("costTime", costTime)
+                    } else {
+                        logI("submit payload rewritten: correctCnt: $correctCnt/$questionCnt")
                     }
                     if (Debug.debug) {
                         thread {

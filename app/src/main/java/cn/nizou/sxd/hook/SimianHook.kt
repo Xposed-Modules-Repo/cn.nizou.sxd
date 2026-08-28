@@ -54,11 +54,28 @@ class SimianHook(
             }
     }
 
-    /** 解析 base64 JSON，按模式改写 examVO.questions，返回新 base64；失败返回 null。 */
+    /**
+     * 解析 base64 JSON，按模式改写 examVO.questions，返回新 base64；失败返回 null。
+     *
+     * **3.140 适配（2026-08-29）**：3.140 的 EncryptResult 只是字符串 holder（构造器直接存
+     * result 字段，见 reverser_ws 反编译），载荷是**加密二进制**（非 base64 JSON）——旧版
+     * base64-JSON 解析必然 JSONException 且每局刷 E 日志。修复：先校验是否为合法 base64，
+     * 不是则一次性警告并跳过（改答案/改题目改由 WebViewHook.hookDataEncrypt 在提交载荷层实现）。
+     */
+    private var encryptPayloadWarned = false
+
     private fun rewriteEncryptPayload(encoded: String): String? {
+        val trimmed = encoded.trim()
+        if (!trimmed.matches(Regex("^[A-Za-z0-9+/=]+$"))) {
+            if (!encryptPayloadWarned) {
+                encryptPayloadWarned = true
+                logI("EncryptResult payload not base64 (encrypted in 3.140+), skip rewrite")
+            }
+            return null
+        }
         return runCatching {
             val answer = Simian.answers
-            val decode = String(Base64.decode(encoded.toByteArray(), 0))
+            val decode = String(Base64.decode(trimmed.toByteArray(), 0))
             val json = JSONObject(decode)
             val examVO = json.getJSONObject("examVO")
             val questions = examVO.getJSONArray("questions")
@@ -90,7 +107,10 @@ class SimianHook(
             val str = json.toString()
             String(Base64.encode(str.toByteArray(), 0))
         }.onFailure {
-            logI(it)
+            if (!encryptPayloadWarned) {
+                encryptPayloadWarned = true
+                logI(it)
+            }
         }.getOrNull()
     }
 
@@ -141,12 +161,26 @@ class SimianHook(
             }
     }
 
-    // ---- 4. UserVipVO.getVipSymbol：解锁 VIP ----
+    // ---- 4. 解锁 VIP ----
+    // 3.140 适配（2026-08-29）：UserVipVO.getVipSymbol 已删除（UserVipVO 改为 data class），
+    // VIP 标志迁移到 VipRightInfoVO.getVipSymbol()（reverser_ws 反编译实证）。
+    // 旧类仍存在时双保险：UserVipVO.getVipSymbol（老版本）也拦一下。
     private fun hookVip() {
-        val userVipVOClass = findClass(Classname.USER_VIP_VO)
-        userVipVOClass.findMethod("getVipSymbol")
-            .intercept("simian_vip") { chain ->
-                if (Simian.vip) true else chain.proceed()
-            }
+        runCatching {
+            findClass(Classname.VIP_RIGHT_INFO_VO).findMethod("getVipSymbol")
+                .intercept("simian_vip_right") { chain ->
+                    if (Simian.vip) true else chain.proceed()
+                }
+        }.onFailure {
+            logI("VipRightInfoVO.getVipSymbol hook failed: ${it.message}")
+        }
+        runCatching {
+            findClass(Classname.USER_VIP_VO).findMethod("getVipSymbol")
+                .intercept("simian_vip") { chain ->
+                    if (Simian.vip) true else chain.proceed()
+                }
+        }.onFailure {
+            logI("UserVipVO.getVipSymbol not in host (3.140+ removed), ok")
+        }
     }
 }

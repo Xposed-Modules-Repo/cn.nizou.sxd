@@ -169,6 +169,15 @@ object Simian {
     /** 口算练习 QuestionVO.getAnswers 自定义答案 */
     val practiceAnswer get() = modulePrefs.getString(moduleStringRes.KEY_PRACTICE_ANSWER, "")!!
 
+    /**
+     * 自定义正确题数（自定义分数新方案，0=全对）。
+     * WebViewHook.hookDataEncrypt 按此值写提交包 status/correctCnt：>0 时前 N 题对、其余错。
+     */
+    val customCorrectCount: Int
+        get() = runCatching {
+            Integer.parseInt(modulePrefs.getString("custom_correct_count", "")!!)
+        }.getOrElse { 0 }
+
     /** 解锁 VIP */
     val vip get() = modulePrefs.getBoolean(moduleStringRes.KEY_VIP, false)
 }
