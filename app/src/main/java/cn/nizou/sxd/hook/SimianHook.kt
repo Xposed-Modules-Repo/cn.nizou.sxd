@@ -57,23 +57,19 @@ class SimianHook(
     /**
      * 解析 base64 JSON，按模式改写 examVO.questions，返回新 base64；失败返回 null。
      *
-     * **3.140 适配（2026-08-29）**：3.140 的 EncryptResult 只是字符串 holder（构造器直接存
-     * result 字段，见 reverser_ws 反编译），载荷是**加密二进制**（非 base64 JSON）——旧版
-     * base64-JSON 解析必然 JSONException 且每局刷 E 日志。修复：先校验是否为合法 base64，
-     * 不是则一次性警告并跳过（改答案/改题目改由 WebViewHook.hookDataEncrypt 在提交载荷层实现）。
+     * **2026-08-29 修正**：必须**保持 lenient 解析**，不得用严格 base64 字符校验——
+     * 3.140 载荷可能带 `v1$` 前缀（AES 加密标记，见记忆 05.5），Android Base64 lenient
+     * 解码会忽略 `$` 等非法字符，旧版正是靠它解析成功并改答案；严格校验会**杀掉原本能用
+     * 的改答案功能**（用户反馈回归，已撤销）。仅剥离 `v1$` 前缀后直接解码：能解析则改写；
+     * 解析失败（真加密二进制）只一次性警告，行为与旧版一致（不刷屏、不影响流程）。
      */
     private var encryptPayloadWarned = false
 
     private fun rewriteEncryptPayload(encoded: String): String? {
-        val trimmed = encoded.trim()
-        if (!trimmed.matches(Regex("^[A-Za-z0-9+/=]+$"))) {
-            if (!encryptPayloadWarned) {
-                encryptPayloadWarned = true
-                logI("EncryptResult payload not base64 (encrypted in 3.140+), skip rewrite")
-            }
-            return null
-        }
         return runCatching {
+            val raw = encoded.trim()
+            // 3.140 加密串可能带 v1$ 前缀：剥离后再 lenient 解码（容忍其余非法字符）
+            val trimmed = if (raw.startsWith("v1$")) raw.substring(3) else raw
             val answer = Simian.answers
             val decode = String(Base64.decode(trimmed.toByteArray(), 0))
             val json = JSONObject(decode)

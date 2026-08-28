@@ -94,8 +94,8 @@ class RetrofitHook(
                     UserInfoStore.updateFromJson(text)
                 }
             }
-        }.onFailure {
-            logI("user info capture failed: ${it.message}")
+        } catch (_: Throwable) {
+            // 用户信息采集属可选功能，失败静默，不打扰正常请求
         }
 
         return response

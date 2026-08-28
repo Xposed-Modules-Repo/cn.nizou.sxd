@@ -234,11 +234,13 @@ class WebViewHook(
             // 答题 JS 配置（mode/自定义答案/自定义正确题数），quick.js 读取；标准模式同样注入。
             injectAaConfig(loadUrl, webView)
             val jsCode = when (mode) {
+                // QUICK/STANDARD 统一用通用答题脚本（Vue2/Vue3 双适配，mode 由 __aa_config 区分）；
+                // 标准模式 3.140 前用旧 standard.js（Vue2 专属），在 Vue3 exercise.html 上已失效，废弃。
                 AutoAnswerMode.QUICK -> quickJs
 
                 AutoAnswerMode.CUSTOM -> PK.customJs
 
-                AutoAnswerMode.STANDARD -> standardJs
+                AutoAnswerMode.STANDARD -> quickJs
 
                 AutoAnswerMode.DISABLE -> ""
             }
@@ -361,10 +363,12 @@ class WebViewHook(
         caller.allMethod("call").forEach { m ->
             m.also { it.isAccessible = true }.intercept("dataEncrypt_call") { chain ->
                 val mode = PK.mode
+                // 3.140 提交载荷兜底：
+                //  - QUICK/STANDARD：提交层强制正确答案（userAnswer=正确答案 + status=1 + correctCnt）——秒结算/标准必赢；
+                //  - Simian.modifyAnswer（自定义答案）：与 mode 解耦，任意模式下把 userAnswer 写成自定义答案 + status=1。
+                // 3.140 的 EncryptResult 载荷是加密二进制（v1$+AES），SimianHook 无法解析；
+                // 提交包（DataEncryptBean.base64）是明文 JSON，这里才是 3.140 改答案的正确 hook 点。
                 val customAnswerOn = Simian.modifyAnswer && Simian.answers.isNotBlank()
-                // 3.140 提交载荷兜底（秒结算/标准/自定义答案的核心）：
-                // 提交包是明文 base64 JSON（costTime 改写已验证可解析），直接写 userAnswer=正确答案 + status=1 + correctCnt，
-                // 服务端按提交包判分 -> 无论前端判题链是否推进，提交结果必为全对（或自定义正确题数）。
                 if (!Debug.debug && mode !in arrayOf(AutoAnswerMode.QUICK, AutoAnswerMode.STANDARD) && !customAnswerOn) {
                     return@intercept chain.proceed()
                 }
@@ -386,25 +390,30 @@ class WebViewHook(
                 runCatching {
                     val questions = json.getJSONArray("questions")
                     val correctLimit = Simian.customCorrectCount
+                    var anyRewritten = false
                     for (i in 0 until questions.length()) {
                         val question = questions.getJSONObject(i)
                         val curTrueAnswer = question.optJSONObject("curTrueAnswer")
-                        // 正确答案来源：question.answer -> answers[0] -> curTrueAnswer.recognizeResult
+                        // 正确答案来源：question.answer -> answers[0]。
+                        // **不**用 curTrueAnswer.recognizeResult（那是识别结果，可能错）；
+                        // 都拿不到时不动该题（保留前端状态），避免写错答案/误判。
                         val correct = question.optString("answer").ifBlank {
                             runCatching {
                                 question.optJSONArray("answers")?.takeIf { it.length() > 0 }?.getString(0).orEmpty()
-                            }.getOrDefault("").ifBlank {
-                                curTrueAnswer?.optString("recognizeResult").orEmpty()
-                            }
+                            }.getOrDefault("")
                         }
                         val shouldCorrect = correctLimit <= 0 || i < correctLimit
-                        if (shouldCorrect) {
-                            val finalAnswer = if (customAnswerOn) Simian.answers else correct
-                            if (finalAnswer.isNotEmpty()) {
-                                question.put("userAnswer", finalAnswer)
-                                question.put("status", 1)
-                            }
-                        } else {
+                        if (customAnswerOn) {
+                            // 自定义答案：直接写用户指定值（改答案功能，3.140 提交层实现）
+                            question.put("userAnswer", Simian.answers)
+                            question.put("status", 1)
+                            anyRewritten = true
+                        } else if (shouldCorrect && correct.isNotEmpty()) {
+                            // 秒结算/标准：写正确答案 + 判对
+                            question.put("userAnswer", correct)
+                            question.put("status", 1)
+                            anyRewritten = true
+                        } else if (!shouldCorrect) {
                             question.put("status", 0)
                         }
                         // 笔迹 pathPoints（保留原逻辑；native 库缺失时为空数组，服务端不校验）
@@ -415,12 +424,6 @@ class WebViewHook(
                             question.put("script", pathPoints.toString())
                         }
                     }
-                    // correctCnt 按 status==1 统计（自定义正确题数生效）
-                    var correctCnt = 0
-                    for (i in 0 until questions.length()) {
-                        if (questions.getJSONObject(i).optInt("status") == 1) correctCnt++
-                    }
-                    json.put("correctCnt", correctCnt)
                     val questionCnt = json.getInt("questionCnt")
                     if (mode == AutoAnswerMode.QUICK) {
                         val appropriateCostTime = appropriateCostTime.get()
@@ -429,9 +432,17 @@ class WebViewHook(
                         } else {
                             getSimulateCostTime(questionCnt).coerceAtLeast(questionCnt * 200L)
                         }
-                        logI("originCostTime: ${json.get("costTime")}, costTime: $costTime, correctCnt: $correctCnt/$questionCnt")
+                        logI("originCostTime: ${json.get("costTime")}, costTime: $costTime")
                         json.put("costTime", costTime)
-                    } else {
+                    }
+                    // correctCnt 仅在实际改写发生时按 status==1 统计（自定义正确题数生效）；
+                    // 未改写（前端自答/无正确答案源）时不动 correctCnt，避免覆盖服务端逻辑。
+                    if (anyRewritten) {
+                        var correctCnt = 0
+                        for (i in 0 until questions.length()) {
+                            if (questions.getJSONObject(i).optInt("status") == 1) correctCnt++
+                        }
+                        json.put("correctCnt", correctCnt)
                         logI("submit payload rewritten: correctCnt: $correctCnt/$questionCnt")
                     }
                     if (Debug.debug) {
