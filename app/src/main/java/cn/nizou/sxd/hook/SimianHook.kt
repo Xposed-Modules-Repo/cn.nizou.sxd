@@ -2,7 +2,6 @@ package cn.nizou.sxd.hook
 
 import android.util.Base64
 import cn.nizou.sxd.Classname
-import cn.nizou.sxd.util.Debug
 import cn.nizou.sxd.util.Simian
 import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.logI
@@ -39,22 +38,19 @@ class SimianHook(
     }
 
     // ---- 1. EncryptResult(String) 构造器：改答案 / 单题改题目 ----
-    // 3.140 适配（2026-08-29）：EncryptResult 载荷是 `v1$`+AES 加密二进制（真机日志乱码实证），
-    // 构造器层解析必然 JSONException。默认直接放行（改答案/改题目由 WebViewHook.hookDataEncrypt
-    // 在提交载荷层实现，那是 3.140 的明文 hook 点）；仅 Debug 开关开启时才尝试 lenient 解析（排查用），
-    // 避免每局刷 E 日志。
+    // 2026-08-29 修正：真机 Debug dump 实证（提交包 answers 被改写为 ["1"]）证明 3.140 题目加载的
+    // EncryptResult 载荷是**明文 base64 JSON**（此前「加密二进制」结论只对 PK 提交响应成立）。
+    // 恢复默认解析（改答案功能可用）；解析失败（真加密场景）时 rewriteEncryptPayload 内部只警告一次，不刷屏。
     private fun hookEncryptResult() {
         val encryptResultClass = findClass(Classname.ENCRYPT_RESULT)
         encryptResultClass.findConstructor(String::class.java)
             .intercept("simian_encrypt_result") { chain ->
-                if (Debug.debug) {
-                    val encoded = chain.getArg(0) as? String
-                    if (encoded != null && (Simian.modifyAnswer || Simian.modifyTitle)) {
-                        rewriteEncryptPayload(encoded)?.let { newEncoded ->
-                            val args = chain.args.toTypedArray()
-                            args[0] = newEncoded
-                            return@intercept chain.proceed(args)
-                        }
+                val encoded = chain.getArg(0) as? String
+                if (encoded != null && (Simian.modifyAnswer || Simian.modifyTitle)) {
+                    rewriteEncryptPayload(encoded)?.let { newEncoded ->
+                        val args = chain.args.toTypedArray()
+                        args[0] = newEncoded
+                        return@intercept chain.proceed(args)
                     }
                 }
                 chain.proceed()

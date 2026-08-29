@@ -369,13 +369,11 @@ class WebViewHook(
         caller.allMethod("call").forEach { m ->
             m.also { it.isAccessible = true }.intercept("dataEncrypt_call") { chain ->
                 val mode = PK.mode
-                // 3.140 提交载荷兜底：
-                //  - QUICK/STANDARD：提交层强制正确答案（userAnswer=正确答案 + status=1 + correctCnt）——秒结算/标准必赢；
-                //  - Simian.modifyAnswer（自定义答案）：与 mode 解耦，任意模式下把 userAnswer 写成自定义答案 + status=1。
-                // 3.140 的 EncryptResult 载荷是加密二进制（v1$+AES），SimianHook 无法解析；
-                // 提交包（DataEncryptBean.base64）是明文 JSON，这里才是 3.140 改答案的正确 hook 点。
-                val customAnswerOn = Simian.modifyAnswer && Simian.answers.isNotBlank()
-                if (!Debug.debug && mode !in arrayOf(AutoAnswerMode.QUICK, AutoAnswerMode.STANDARD) && !customAnswerOn) {
+                // 3.140 提交载荷兜底（秒结算/标准模式）：把提交包已有题的 userAnswer 修正为正确答案 + status=1。
+                // 2026-08-29 真机 dump 实证（userAnswer="1" vs answer="<"）：**不**在此覆盖 userAnswer 为自定义答案
+                // （Simian 改答案由 SimianHook EncryptResult 处理前端数据层，提交层覆盖会导致服务端判错）；
+                // 也不改变 questions 结构（前端原生链推进后提交包是完整 N 题，兜底只修正答案字段）。
+                if (!Debug.debug && mode !in arrayOf(AutoAnswerMode.QUICK, AutoAnswerMode.STANDARD)) {
                     return@intercept chain.proceed()
                 }
                 val bean = chain.getArg(0)
@@ -390,7 +388,7 @@ class WebViewHook(
                 if (!json.has("pkIdStr")) {
                     return@intercept chain.proceed()
                 }
-                if (!Debug.debug && mode !in arrayOf(AutoAnswerMode.QUICK, AutoAnswerMode.STANDARD) && !customAnswerOn) {
+                if (!Debug.debug && mode !in arrayOf(AutoAnswerMode.QUICK, AutoAnswerMode.STANDARD)) {
                     return@intercept chain.proceed()
                 }
                 runCatching {
@@ -409,13 +407,8 @@ class WebViewHook(
                             }.getOrDefault("")
                         }
                         val shouldCorrect = correctLimit <= 0 || i < correctLimit
-                        if (customAnswerOn) {
-                            // 自定义答案：直接写用户指定值（改答案功能，3.140 提交层实现）
-                            question.put("userAnswer", Simian.answers)
-                            question.put("status", 1)
-                            anyRewritten = true
-                        } else if (shouldCorrect && correct.isNotEmpty()) {
-                            // 秒结算/标准：写正确答案 + 判对
+                        if (shouldCorrect && correct.isNotEmpty()) {
+                            // 秒结算/标准：userAnswer=正确答案 + status=1（服务端按 userAnswer 判分）
                             question.put("userAnswer", correct)
                             question.put("status", 1)
                             anyRewritten = true

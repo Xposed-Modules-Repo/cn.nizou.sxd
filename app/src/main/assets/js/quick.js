@@ -1,17 +1,21 @@
-// quick.js —— 通用自动答题 v3（PK exercise.html Vue3 + 练习 animation-oral.html Vue2）
-// 核心机制（恢复旧版「绘制」驱动）：
-//   1) 绘制：把正确答案的笔画（内置字形库，纯 JS，无需 native lib）画到答题 canvas，
-//      触发前端**原生** recognize 链（strokes -> native OCR(expectedResult) -> At -> Bt 判对）
-//      -> 前端自己写 status=1 -> 推进 -> 提交全对。这是标准/极速模式可用的根基。
-//   2) 状态修正：Vue2/Vue3 树里置 answerPaperResult.answer=1(CORRECT) 并修正 questionList.status/userAnswer。
-//   3) 提交载荷兜底在 native 侧（WebViewHook.hookDataEncrypt）——前端未推进时提交包也全对。
-// 诊断日志经 AutoOral bridge 写文件日志（tries/绘制次数/组件查找/遍历深度）。
+// quick.js —— 通用自动答题 v4（PK exercise.html Vue3 + 练习 animation-oral.html Vue2）
+// 2026-08-29 真机提交包实证（qCnt=1/30, userAnswer="1", answers=["1"]）后的修正：
+//   - **不再硬改 answerPaperResult.answer / questionList.status**：那会让前端 200ms/题 快速"假推进"，
+//     提交包只剩最后一题（30 题只提交 1 题，服务端判分必输）；
+//   - 只做一件事：把**当前题正确答案的笔画**画到答题 canvas（内置字形库，纯 JS），
+//     触发前端**原生** recognize 链（笔画 -> native OCR(expectedResult) -> At -> Bt 判对
+//     -> 前端自己写 status=1 -> 自己推进 -> 提交完整 30 题记录）。前端原生链 100% 正确；
+//   - 节奏：画完停手 >=1.5s 等 OCR（前端"停止 700ms 后判题"），题号变了才画下一题；
+//     同一题 1.5s 后未推进则重画（OCR 可能判错）；
+//   - MODE==='custom' 时画自定义答案（CUSTOM_ANSWER），其余模式画题目数据里的正确答案。
+// 提交载荷兜底（WebViewHook.hookDataEncrypt）仍在 native 侧：把提交包已有题的 userAnswer 修正为
+// 正确答案 + status=1，防 OCR 识别错导致服务端判错。诊断日志经 AutoOral bridge 写文件日志。
 setTimeout(function () {
     var CFG = window.__aa_config || {};
     var MODE = CFG.mode || 'quick';
     var CUSTOM_ANSWER = CFG.answer || '';
-    var CORRECT_COUNT = CFG.correctCount || 0;
-    var tries = 0, rootFound = 0, vue3 = false, vue2 = false, depth = 0, comps = 0, stateSet = 0, statusSet = 0, drawn = 0, drawnAnswer = '';
+    var tries = 0, rootFound = 0, vue3 = false, vue2 = false, depth = 0, comps = 0, drawn = 0;
+    var lastDrawAt = 0, lastDrawAnswer = '';
     function dbg(msg) {
         try { if (window.AutoOral && window.AutoOral.log) window.AutoOral.log(String(msg)); } catch (e) {}
         try { console.log(String(msg)); } catch (e) {}
@@ -30,24 +34,6 @@ setTimeout(function () {
         return !!v && Array.isArray(v) && v.length > 0 && v[0] && typeof v[0] === 'object' &&
             ('status' in v[0] || 'curTrueAnswer' in v[0] || 'userAnswer' in v[0]);
     }
-    function fixList(list) {
-        var changed = false;
-        for (var i = 0; i < list.length; i++) {
-            var q = list[i];
-            if (!q || typeof q !== 'object') continue;
-            var correct = CUSTOM_ANSWER || correctOf(q);
-            var shouldCorrect = CORRECT_COUNT > 0 ? i < CORRECT_COUNT : true;
-            if (shouldCorrect) {
-                if (correct && q.userAnswer !== correct) { try { q.userAnswer = correct; changed = true; } catch (e) {} }
-                if (q.status !== 1) { try { q.status = 1; changed = true; } catch (e) {} }
-            } else {
-                if (q.status !== 0) { try { q.status = 0; changed = true; } catch (e) {} }
-            }
-        }
-        if (changed) statusSet++;
-        return changed;
-    }
-    // ---------- Vue3 / Vue2 遍历（同 v2） ----------
     function findV3Root() {
         try {
             var app = document.querySelector('#app');
@@ -55,31 +41,6 @@ setTimeout(function () {
             if (window.VUE_APP && window.VUE_APP.__vue_app__ && window.VUE_APP.__vue_app__._instance) return window.VUE_APP.__vue_app__._instance;
         } catch (e) {}
         return null;
-    }
-    function walkV3(node, d) {
-        if (!node || d > 16) return;
-        if (node.component) {
-            var inst = node.component;
-            if (d > depth) depth = d; comps++;
-            var props = inst.props || {};
-            if (props.answerPaperResult) {
-                var ar = props.answerPaperResult;
-                if (ar && ar.answer !== 1) {
-                    try { ar.answer = 1; stateSet++; } catch (e) {}
-                    try { if (CUSTOM_ANSWER) ar.recognizeResult = CUSTOM_ANSWER; } catch (e) {}
-                    try { if (!ar.pathPoints) ar.pathPoints = []; } catch (e) {}
-                }
-            }
-            try { if (isQList(inst.setupState && inst.setupState.questionList)) fixList(inst.setupState.questionList); } catch (e) {}
-            try { if (isQList(inst.setupState && inst.setupState.questionsList)) fixList(inst.setupState.questionsList); } catch (e) {}
-            try { if (isQList(inst.proxy && inst.proxy.questionList)) fixList(inst.proxy.questionList); } catch (e) {}
-            try { if (inst.provides) for (var k in inst.provides) { var v = inst.provides[k]; if (isQList(v)) fixList(v); } } catch (e) {}
-            walkV3(inst.subTree, d + 1);
-            return;
-        }
-        if (Array.isArray(node.children)) { for (var i = 0; i < node.children.length; i++) walkV3(node.children[i], d + 1); }
-        else if (node.children && typeof node.children === 'object') walkV3(node.children, d + 1);
-        if (node.dynamicChildren) { for (var j = 0; j < node.dynamicChildren.length; j++) walkV3(node.dynamicChildren[j], d + 1); }
     }
     function findV2Root() {
         try {
@@ -91,19 +52,65 @@ setTimeout(function () {
         } catch (e) {}
         return null;
     }
-    function walkV2(comp, d) {
-        if (!comp || d > 16) return;
-        if (d > depth) depth = d; comps++;
-        var p = comp._setupProxy || comp._setupState || comp;
-        try { if (p.answerPaperResult && p.answerPaperResult.answer !== 1) { p.answerPaperResult.answer = 1; stateSet++; } } catch (e) {}
-        var lists = [];
-        try { if (isQList(p.questionList)) lists.push(p.questionList); } catch (e) {}
-        try { if (isQList(p.questionsList)) lists.push(p.questionsList); } catch (e) {}
-        for (var i = 0; i < lists.length; i++) fixList(lists[i]);
-        if (comp.$children) for (var j = 0; j < comp.$children.length; j++) walkV2(comp.$children[j], d + 1);
+    // ---------- 取当前题正确答案 ----------
+    function currentCorrectAnswer() {
+        if (MODE === 'custom' && CUSTOM_ANSWER) return CUSTOM_ANSWER;
+        var found = '';
+        function pickFromInst(inst) {
+            if (found) return;
+            var lists = [];
+            try { if (isQList(inst.setupState && inst.setupState.questionList)) lists.push(inst.setupState.questionList); } catch (e) {}
+            try { if (isQList(inst.setupState && inst.setupState.questionsList)) lists.push(inst.setupState.questionsList); } catch (e) {}
+            try { if (isQList(inst.proxy && inst.proxy.questionList)) lists.push(inst.proxy.questionList); } catch (e) {}
+            for (var i = 0; i < lists.length; i++) {
+                var list = lists[i];
+                var idx = -1;
+                try { if (inst.setupState && typeof inst.setupState.questionIndex === 'number') idx = inst.setupState.questionIndex; } catch (e) {}
+                try { if (inst.setupState && inst.setupState.questionIndex && typeof inst.setupState.questionIndex.value === 'number') idx = inst.setupState.questionIndex.value; } catch (e) {}
+                if (idx < 0) idx = 0;
+                var q = list[idx] || list[0];
+                if (q) { found = correctOf(q); if (found) return; }
+            }
+        }
+        function walkInst(inst, d) {
+            if (!inst || d > 14 || found) return;
+            if (d > depth) depth = d; comps++;
+            pickFromInst(inst);
+            var sub = inst.subTree;
+            if (!sub) return;
+            (function walkV(node, dd) {
+                if (!node || dd > 14 || found) return;
+                if (node.component) { walkInst(node.component, dd + 1); return; }
+                if (Array.isArray(node.children)) for (var i = 0; i < node.children.length; i++) walkV(node.children[i], dd + 1);
+                else if (node.children && typeof node.children === 'object') walkV(node.children, dd + 1);
+                if (node.dynamicChildren) for (var j = 0; j < node.dynamicChildren.length; j++) walkV(node.dynamicChildren[j], dd + 1);
+            })(sub, 0);
+        }
+        var root3 = findV3Root();
+        if (root3) { vue3 = true; rootFound++; try { walkInst(root3, 0); } catch (e) {} return found; }
+        var root2 = findV2Root();
+        if (root2) {
+            vue2 = true; rootFound++;
+            try {
+                (function walk2(comp, d) {
+                    if (!comp || d > 14 || found) return;
+                    if (d > depth) depth = d; comps++;
+                    var p = comp._setupProxy || comp._setupState || comp;
+                    var lists = [];
+                    try { if (isQList(p.questionList)) lists.push(p.questionList); } catch (e) {}
+                    try { if (isQList(p.questionsList)) lists.push(p.questionsList); } catch (e) {}
+                    for (var i = 0; i < lists.length; i++) {
+                        var q = lists[i][comp.questionIndex || 0] || lists[i][0];
+                        if (q) { found = correctOf(q); if (found) return; }
+                    }
+                    if (comp.$children) for (var j = 0; j < comp.$children.length; j++) walk2(comp.$children[j], d + 1);
+                })(root2, 0);
+            } catch (e) {}
+            return found;
+        }
+        return found;
     }
-    // ---------- 绘制：把正确答案笔画画到 canvas（恢复旧版「绘制」机制） ----------
-    // 字形库：字符 -> 笔画数组，每笔为归一化折线点 [x,y]（0~1 网格，手写风格）
+    // ---------- 字形库 + 绘制 ----------
     var GLYPHS = {
         '0': [[[0.35,0.12],[0.6,0.12],[0.74,0.22],[0.8,0.4],[0.8,0.6],[0.74,0.8],[0.6,0.9],[0.4,0.9],[0.26,0.8],[0.2,0.6],[0.2,0.4],[0.26,0.22],[0.35,0.12]]],
         '1': [[[0.42,0.35],[0.52,0.15],[0.56,0.2],[0.56,0.85]]],
@@ -152,7 +159,6 @@ setTimeout(function () {
             } catch (e) {}
         }
     }
-    /** 绘制答案文本：逐字符按网格布局画到 canvas。返回是否画了笔。 */
     function drawAnswer(text) {
         if (!text) return false;
         var c = findCanvas();
@@ -161,94 +167,37 @@ setTimeout(function () {
         if (rect.width < 10 || rect.height < 10) return false;
         var chars = String(text).split('');
         var n = chars.length;
-        var cellW = rect.width / n;
-        var cellH = rect.height;
-        var drawnAny = false;
+        var cellW = rect.width / n, cellH = rect.height;
+        var any = false;
         for (var ci = 0; ci < n; ci++) {
             var pts = GLYPHS[chars[ci]];
             if (!pts || !pts.length) continue;
             var sx = cellW * 0.72, sy = cellH * 0.78;
             var ox = rect.left + cellW * (ci + 0.5) - sx / 2;
             var oy = rect.top + (cellH - sy) / 2;
-            for (var s = 0; s < pts.length; s++) {
-                dispatchStroke(c, pts[s], ox, oy, sx, sy);
-                drawnAny = true;
-            }
+            for (var s = 0; s < pts.length; s++) { dispatchStroke(c, pts[s], ox, oy, sx, sy); any = true; }
         }
-        return drawnAny;
+        return any;
     }
-    // ---------- 主循环 ----------
-    function currentCorrectAnswer() {
-        // 从 Vue 树拿当前题答案（优先 CUSTOM_ANSWER）
-        if (CUSTOM_ANSWER) return CUSTOM_ANSWER;
-        var found = '';
-        function pickFromInst(inst) {
-            if (found) return;
-            var lists = [];
-            try { if (isQList(inst.setupState && inst.setupState.questionList)) lists.push(inst.setupState.questionList); } catch (e) {}
-            try { if (isQList(inst.setupState && inst.setupState.questionsList)) lists.push(inst.setupState.questionsList); } catch (e) {}
-            try { if (isQList(inst.proxy && inst.proxy.questionList)) lists.push(inst.proxy.questionList); } catch (e) {}
-            for (var i = 0; i < lists.length; i++) {
-                var list = lists[i];
-                var idx = -1;
-                try { if (inst.setupState && typeof inst.setupState.questionIndex === 'number') idx = inst.setupState.questionIndex; } catch (e) {}
-                try { if (inst.setupState && inst.setupState.questionIndex && typeof inst.setupState.questionIndex.value === 'number') idx = inst.setupState.questionIndex.value; } catch (e) {}
-                if (idx < 0) idx = 0;
-                var q = list[idx] || list[0];
-                if (q) { found = correctOf(q); if (found) return; }
-            }
-        }
-        function walkInst(inst, d) {
-            if (!inst || d > 14 || found) return;
-            pickFromInst(inst);
-            var sub = inst.subTree;
-            if (!sub) return;
-            (function walkV(node, dd) {
-                if (!node || dd > 14 || found) return;
-                if (node.component) { walkInst(node.component, dd + 1); return; }
-                if (Array.isArray(node.children)) for (var i = 0; i < node.children.length; i++) walkV(node.children[i], dd + 1);
-                else if (node.children && typeof node.children === 'object') walkV(node.children, dd + 1);
-                if (node.dynamicChildren) for (var j = 0; j < node.dynamicChildren.length; j++) walkV(node.dynamicChildren[j], dd + 1);
-            })(sub, 0);
-        }
-        var root3 = findV3Root();
-        if (root3) { try { walkInst(root3, 0); } catch (e) {} return found; }
-        var root2 = findV2Root();
-        if (root2) {
-            try {
-                (function walk2(comp, d) {
-                    if (!comp || d > 14 || found) return;
-                    var p = comp._setupProxy || comp._setupState || comp;
-                    var lists = [];
-                    try { if (isQList(p.questionList)) lists.push(p.questionList); } catch (e) {}
-                    try { if (isQList(p.questionsList)) lists.push(p.questionsList); } catch (e) {}
-                    for (var i = 0; i < lists.length; i++) {
-                        var q = lists[i][comp.questionIndex || 0] || lists[i][0];
-                        if (q) { found = correctOf(q); if (found) return; }
-                    }
-                    if (comp.$children) for (var j = 0; j < comp.$children.length; j++) walk2(comp.$children[j], d + 1);
-                })(root2, 0);
-            } catch (e) {}
-            return found;
-        }
-        return found;
-    }
-    function tryAnswer() {
+    // ---------- 主循环：1.5s 节奏绘制 ----------
+    function tryDraw() {
         tries++;
-        var root3 = findV3Root();
-        if (root3) { vue3 = true; rootFound++; try { walkV3(root3.subTree, 0); } catch (e) {} }
-        else { var root2 = findV2Root(); if (root2) { vue2 = true; rootFound++; try { walkV2(root2, 0); } catch (e) {} } }
-        // 绘制：当前题未判对（answerPaperResult.answer!=1 或 canvas 空）时画答案笔画
         var answer = currentCorrectAnswer();
-        if (answer && (answer !== drawnAnswer || tries % 30 === 0)) {
-            if (drawAnswer(answer)) { drawn++; drawnAnswer = answer; dbg('[quick] drew answer: ' + answer + ' (total ' + drawn + ')'); }
+        if (!answer) return;
+        var now = Date.now();
+        // 同一题画过且未到 1.5s：等前端 OCR 判对（前端"停止 700ms 后判题"，画完必须停手）
+        if (answer === lastDrawAnswer && now - lastDrawAt < 1500) return;
+        if (drawAnswer(answer)) {
+            lastDrawAt = now;
+            lastDrawAnswer = answer;
+            drawn++;
+            dbg('[quick] drew: ' + answer + ' (total ' + drawn + ', tries ' + tries + ')');
         }
     }
-    dbg('[quick] js injected, mode=' + MODE + ', custom=' + CUSTOM_ANSWER + ', correctCount=' + CORRECT_COUNT);
-    var timer = setInterval(function () {
-        tryAnswer();
-        if (tries % 10 === 0) dbg('[quick] diag tries=' + tries + ' root=' + rootFound + ' vue3=' + vue3 + ' vue2=' + vue2 + ' depth=' + depth + ' comps=' + comps + ' stateSet=' + stateSet + ' statusSet=' + statusSet + ' drawn=' + drawn);
-        if (tries > 400) { clearInterval(timer); dbg('[quick] stopped tries=' + tries); }
-    }, 200);
-    setTimeout(function () { try { clearInterval(timer); } catch (e) {} }, 90000);
+    dbg('[quick] js injected, mode=' + MODE + ', custom=' + CUSTOM_ANSWER);
+    var timer = setInterval(tryDraw, 250);
+    setTimeout(function () {
+        try { clearInterval(timer); } catch (e) {}
+        dbg('[quick] stopped tries=' + tries + ' drawn=' + drawn + ' root=' + rootFound + ' vue3=' + vue3 + ' vue2=' + vue2 + ' depth=' + depth + ' comps=' + comps);
+    }, 90000);
 }, 0);
