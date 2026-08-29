@@ -9,12 +9,12 @@ import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -43,7 +43,6 @@ import cn.nizou.sxd.util.UserInfoStore
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Content_copy
 import com.composables.icons.materialsymbols.outlined.Refresh
-import com.composables.icons.materialsymbols.outlined.Refresh
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -51,17 +50,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /**
- * 用户信息卡片：昵称/头像/ID/Cookie。
+ * 用户信息卡片组（**多子账号**）。
  *
- * 数据源：RetrofitHook 从**任意**用户信息接口响应动态提取（字段多版本兼容：nickname/nickName/userName/name、
- * userId/userid/id、avatarUrl/headUrl/avatar/headImg，见 UserInfoStore.updateFromJson），叠加
- * WebView CookieManager（https://xyks.yuanfudao.com）实时 Cookie；头像按 avatarUrl 下载。
+ * 数据源：RetrofitHook 从接口响应动态提取——
+ *  - 账号列表：`/accounts/android/current` 的 `subUserInfos`（全部子账号 id）；
+ *  - 单个账号资料：`/leo-profile/android/user-infos`（nickname+avatarUrl）等任意含用户字段的响应；
+ *  - Cookie：Set-Cookie 头 + WebView CookieManager（https://xyks.yuanfudao.com）。
  *
- * 2026-08-29 修复：卡片数据改为**每次重组重读 prefs**（UserInfoStore 同步读，永远最新），
- * 不再依赖进入页面时的旧值：
- * - 每 5 秒自动刷新（登录态/采集数据变化时模块页无需手动操作即更新）；
- * - **点击卡片立即刷新**（重读 prefs + 重新下载头像）；
- * - 尾随复制图标点击复制 Cookie（不再占用整卡点击）。
+ * 行为：
+ *  - **卡片数量随账号数自适应**（每账号一张卡，缺资料显示「昵称待采集」占位）；
+ *  - 每 5 秒自动刷新；点击卡片/刷新图标立即刷新（重读 prefs + 重新下载头像）；
+ *  - 底部 Cookie 行点击复制。
  */
 @Composable
 fun UserInfoCard(modifier: Modifier = Modifier) {
@@ -76,114 +75,77 @@ fun UserInfoCard(modifier: Modifier = Modifier) {
         }
     }
 
-    // 每次重组都重读（prefs 是同步实时读，重组即最新；WebView Cookie 每次现取）。
-    val uid = UserInfoStore.userId
-    val name = UserInfoStore.userName
-    val avatarUrl = UserInfoStore.avatarUrl
+    val accounts = UserInfoStore.accounts
     val storedCookie = UserInfoStore.cookie
     val webCookie = runCatching {
         CookieManager.getInstance().getCookie("https://xyks.yuanfudao.com")
     }.getOrDefault("") ?: ""
     val fullCookie = listOf(storedCookie, webCookie).filter { it.isNotBlank() }.joinToString("; ")
 
-    var avatar by remember { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(avatarUrl, refreshTick) {
-        if (avatarUrl.isNotBlank()) {
-            avatar = withContext(Dispatchers.IO) {
-                runCatching {
-                    val conn = (URL(avatarUrl).openConnection() as HttpURLConnection).apply {
-                        connectTimeout = 4000
-                        readTimeout = 4000
-                        setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android)")
-                    }
-                    conn.inputStream.use { BitmapFactory.decodeStream(it) }?.asImageBitmap()
-                }.getOrNull()
-            }
-        }
-    }
-
-    BaseItemContainer(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    // 点击卡片 = 立即刷新用户信息
-                    refreshTick++
-                    Toast.makeText(context, "已刷新用户信息", Toast.LENGTH_SHORT).show()
-                }
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                val bmp = avatar
-                if (bmp != null) {
-                    Image(
-                        bitmap = bmp,
-                        contentDescription = "头像",
-                        modifier = Modifier.size(46.dp).clip(CircleShape),
-                    )
-                } else {
-                    Text(
-                        text = name.firstOrNull()?.toString() ?: "?",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                }
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = when {
-                        name.isNotBlank() -> name
-                        uid.isNotBlank() -> "已检测账号 ID:$uid（昵称待采集，打开个人中心）"
-                        else -> "未采集到用户信息（点击刷新）"
-                    },
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = if (uid.isNotBlank()) "ID: $uid" else "ID: —",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = if (fullCookie.isNotBlank())
-                        "Cookie: ${fullCookie.take(60)}…（点击复制图标）"
-                    else
-                        "Cookie: 暂无（打开小猿口算后自动采集）",
-                    fontSize = 11.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(
-                    imageVector = MaterialSymbols.Outlined.Refresh,
-                    contentDescription = "刷新",
-                    tint = MaterialTheme.colorScheme.primary,
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (accounts.isEmpty()) {
+            BaseItemContainer(Modifier.fillMaxWidth()) {
+                Box(
                     modifier = Modifier
-                        .size(20.dp)
+                        .fillMaxWidth()
                         .clickable {
                             refreshTick++
                             Toast.makeText(context, "已刷新用户信息", Toast.LENGTH_SHORT).show()
-                        },
+                        }
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "未采集到用户信息（点击刷新）",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+        } else {
+            accounts.forEach { account ->
+                AccountRow(
+                    account = account,
+                    refreshTick = refreshTick,
+                    onRefresh = {
+                        refreshTick++
+                        Toast.makeText(context, "已刷新用户信息", Toast.LENGTH_SHORT).show()
+                    },
                 )
-                Spacer(Modifier.height(6.dp))
+            }
+        }
+
+        // Cookie 行（全局一条，点击复制）
+        BaseItemContainer(Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Cookie", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = if (fullCookie.isNotBlank())
+                            fullCookie.take(70) + "…"
+                        else
+                            "暂无（打开小猿口算后自动采集）",
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
                 Icon(
                     imageVector = MaterialSymbols.Outlined.Content_copy,
                     contentDescription = "复制Cookie",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
-                        .size(20.dp)
+                        .size(22.dp)
                         .clickable {
                             if (fullCookie.isNotBlank()) {
                                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -195,6 +157,86 @@ fun UserInfoCard(modifier: Modifier = Modifier) {
                         },
                 )
             }
+        }
+    }
+}
+
+/** 单个账号卡片：头像 + 昵称/ID；点击整卡或刷新图标立即刷新全部。 */
+@Composable
+private fun AccountRow(
+    account: UserInfoStore.Account,
+    refreshTick: Int,
+    onRefresh: () -> Unit,
+) {
+    var avatar by remember(account.uid) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(account.avatar, refreshTick) {
+        if (account.avatar.isNotBlank()) {
+            avatar = withContext(Dispatchers.IO) {
+                runCatching {
+                    val conn = (URL(account.avatar).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 4000
+                        readTimeout = 4000
+                        setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android)")
+                    }
+                    conn.inputStream.use { BitmapFactory.decodeStream(it) }?.asImageBitmap()
+                }.getOrNull()
+            }
+        }
+    }
+
+    BaseItemContainer(Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onRefresh)
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                val bmp = avatar
+                if (bmp != null) {
+                    Image(
+                        bitmap = bmp,
+                        contentDescription = "头像",
+                        modifier = Modifier.size(42.dp).clip(CircleShape),
+                    )
+                } else {
+                    Text(
+                        text = account.name.firstOrNull()?.toString() ?: "?",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = if (account.name.isNotBlank()) account.name else "昵称待采集（打开个人中心）",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "ID: ${account.uid}",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = MaterialSymbols.Outlined.Refresh,
+                contentDescription = "刷新",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .size(20.dp)
+                    .clickable(onClick = onRefresh),
+            )
         }
     }
 }
