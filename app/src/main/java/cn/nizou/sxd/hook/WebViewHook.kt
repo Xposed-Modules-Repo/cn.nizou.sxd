@@ -415,13 +415,9 @@ class WebViewHook(
                         } else if (!shouldCorrect) {
                             question.put("status", 0)
                         }
-                        // 笔迹 pathPoints（保留原逻辑；native 库缺失时为空数组，服务端不校验）
-                        val answer = question.optString("userAnswer")
-                        val pathPoints = answer.pathPoints.toJSONArray()
-                        curTrueAnswer?.put("pathPoints", pathPoints)
-                        if (question.has("script")) {
-                            question.put("script", pathPoints.toString())
-                        }
+                        // 2026-08-29：**不再注入 pathPoints/script**——native 库缺失时是空数组，
+                        // 反而把前端真实手写笔画覆盖成 []。提交包只改 userAnswer/status，
+                        // 笔画像素数据（script/pathPoints）原样保留前端绘制（真实手写，防检测）。
                     }
                     val questionCnt = json.getInt("questionCnt")
                     if (mode == AutoAnswerMode.QUICK) {
