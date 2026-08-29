@@ -3,10 +3,14 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      draft:
-        description: "Publish as draft (仅 tag 正式发布时忽略)"
+      prerelease:
+        description: "发布为预发行（默认正式发布）"
         type: boolean
         default: false
+      publish_lsposed:
+        description: "同步推送 LSPosed 镜像仓库（需配置 LSPOSED_PAT secret；未配置则跳过并提示手动步骤）"
+        type: boolean
+        default: true
   push:
     tags:
       - 'v*'          # tag 触发正式发布（大版本）
@@ -185,7 +189,7 @@ jobs:
           fi
           echo "=== Changelog ==="; cat changelog.md
 
-      # ---- tag 触发 → 正式 Release（大版本，notes=上次 release 之后的改动）；手动 → 滚动 CI Release ----
+      # ---- tag 触发 → 正式 Release（大版本，notes=上次 release 之后的改动）----
       - name: Publish (tag release)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
@@ -197,6 +201,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # ---- 手动发布（workflow_dispatch）：滚动 CI Release，默认**正式**（非预发行，由 inputs.prerelease 控制）----
       - name: Publish (rolling CI release)
         if: github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/')
         env:
@@ -207,8 +212,55 @@ jobs:
           # 远端 tag CI 已删，本地 checkout（fetch-depth 0 拉全 tags）残留同名 tag 会让
           # gh release create 报 "tag CI exists locally but has not been pushed"，先本地删掉。
           git tag -d CI 2>/dev/null || true
+          PRERELEASE_FLAG=""
+          if [ "${{ inputs.prerelease }}" = "true" ]; then PRERELEASE_FLAG="--prerelease"; fi
           gh release create CI \
             --title "老挂戏老叟 CI" \
-            --prerelease \
+            $PRERELEASE_FLAG \
             --notes "最新 CI 构建产物（commit ${{ github.sha }}）。应用内更新器通过 update.json 读取。" \
-            assets/* || true
+            assets/*
+
+  # ---- LSPosed 镜像同步（workflow_dispatch 手动发布时自动执行；需 LSPOSED_PAT secret，未配置则跳过并提示）----
+  lsposed_sync:
+    name: Sync LSPosed mirror
+    needs: [build_signed, release]
+    if: github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') && inputs.publish_lsposed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download signed APK
+        uses: actions/download-artifact@v4
+        with:
+          name: 老挂戏老叟-signed
+          path: lsposed_assets
+      - name: Sync mirror + release
+        env:
+          LSPOSED_PAT: ${{ secrets.LSPOSED_PAT }}
+          VC: ${{ needs.build_signed.outputs.versionCode }}
+          VN: ${{ needs.build_signed.outputs.versionName }}
+        run: |
+          set -euo pipefail
+          SHORT=$(git rev-parse --short HEAD)
+          TAG="${VC}-${VN}-${SHORT}"
+          if [ -z "$LSPOSED_PAT" ]; then
+            echo "::warning::LSPOSED_PAT 未配置，跳过自动同步。"
+            echo "::warning::手动步骤（参考 skill 05-skill.md 发布流程）：git push mirror main && git tag $TAG && git push mirror $TAG && gh release create $TAG --repo Xposed-Modules-Repo/cn.nizou.sxd --title \"$VN\" lsposed_assets/*.apk"
+            exit 0
+          fi
+          export GH_TOKEN="$LSPOSED_PAT"
+          MIRROR="https://x-access-token:${LSPOSED_PAT}@github.com/Xposed-Modules-Repo/cn.nizou.sxd.git"
+          git remote remove mirror 2>/dev/null || true
+          git remote add mirror "$MIRROR"
+          git push mirror main
+          git tag "$TAG"
+          git push mirror "$TAG"
+          gh release create "$TAG" --repo Xposed-Modules-Repo/cn.nizou.sxd \
+            --title "$VN" \
+            --notes "老挂戏老叟 $VN (code $VC)：CI 构建产物（commit $SHORT）。LSPosed 官网模块页自动构建。" \
+            lsposed_assets/*.apk
+          echo "LSPosed mirror synced: tag $TAG, release created."
