@@ -46,15 +46,48 @@ class SimianHook(
         encryptResultClass.findConstructor(String::class.java)
             .intercept("simian_encrypt_result") { chain ->
                 val encoded = chain.getArg(0) as? String
-                if (encoded != null && (Simian.modifyAnswer || Simian.modifyTitle)) {
-                    rewriteEncryptPayload(encoded)?.let { newEncoded ->
-                        val args = chain.args.toTypedArray()
-                        args[0] = newEncoded
-                        return@intercept chain.proceed(args)
+                if (encoded != null) {
+                    // 无论改答案开关都缓存题目答案（EncryptResult 载荷 = examVO.questions 明文 base64 JSON）
+                    cacheAnswers(encoded)
+                    if (Simian.modifyAnswer || Simian.modifyTitle) {
+                        rewriteEncryptPayload(encoded)?.let { newEncoded ->
+                            val args = chain.args.toTypedArray()
+                            args[0] = newEncoded
+                            return@intercept chain.proceed(args)
+                        }
                     }
                 }
                 chain.proceed()
             }
+    }
+
+    /** 从 EncryptResult 载荷解析题目答案缓存（examVO.questions[].answer），供秒结算绘制。失败静默。 */
+    private fun cacheAnswers(encoded: String) {
+        runCatching {
+            val raw = encoded.trim()
+            val trimmed = if (raw.startsWith("v1$")) raw.substring(3) else raw
+            val json = JSONObject(String(Base64.decode(trimmed.toByteArray(), 0)))
+            val examVO = json.optJSONObject("examVO") ?: return
+            val questions = examVO.optJSONArray("questions") ?: return
+            val arr = JSONArray()
+            for (i in 0 until questions.length()) {
+                val q = questions.getJSONObject(i)
+                val answer = q.optString("answer").ifBlank {
+                    runCatching {
+                        q.optJSONArray("answers")?.takeIf { it.length() > 0 }?.getString(0).orEmpty()
+                    }.getOrDefault("")
+                }
+                if (answer.isNotEmpty()) {
+                    arr.put(JSONObject().put("content", q.optString("content")).put("answer", answer))
+                }
+            }
+            if (arr.length() > 0) {
+                AnswerCache.answers = arr.toString()
+                logI("answers cached via EncryptResult: " + arr.length() + " questions")
+            }
+        }.onFailure {
+            // 解析失败（真加密响应等）静默，不影响改答案流程
+        }
     }
 
     /**

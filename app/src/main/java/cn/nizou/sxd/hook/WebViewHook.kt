@@ -9,6 +9,7 @@ import cn.nizou.sxd.Classname
 import cn.nizou.sxd.XposedInit
 import cn.nizou.sxd.XposedInit.Companion.moduleRes
 import cn.nizou.sxd.entities.AutoAnswerMode
+import cn.nizou.sxd.util.AnswerCache
 import cn.nizou.sxd.util.Debug
 import cn.nizou.sxd.util.PK
 import cn.nizou.sxd.util.Simian
@@ -58,12 +59,7 @@ class WebViewHook(
 
     private val pkPageLoaded = AtomicBoolean(false)
 
-    /**
-     * 题目答案缓存（hookDataDecrypt 从解密命令明文提取，quick.js 经 getAnswers() 读取）。
-     * 格式：JSON 数组 [{content, answer}]，按题目顺序。
-     */
-    @Volatile
-    private var answersCache: String = "[]"
+
 
     private val resultPageLoaded = AtomicBoolean(false)
 
@@ -381,7 +377,7 @@ class WebViewHook(
 
     /** quick.js 轮询取题目答案（JSON 数组 [{content,answer}]）。 */
     @JavascriptInterface
-    fun getAnswers(): String = answersCache
+    fun getAnswers(): String = AnswerCache.answers
 
     /**
      * hook DataDecryptBean 解密命令：拦截解密结果明文（examVO.questions 带 answer），
@@ -409,8 +405,8 @@ class WebViewHook(
                             }
                         }
                         if (arr.length() > 0) {
-                            answersCache = arr.toString()
-                            logI("answers cached: ${arr.length()} questions")
+                            AnswerCache.answers = arr.toString()
+                            logI("answers cached via dataDecrypt: " + arr.length() + " questions")
                         }
                     }.onFailure {
                         logI("answers parse failed: ${it.message}")
