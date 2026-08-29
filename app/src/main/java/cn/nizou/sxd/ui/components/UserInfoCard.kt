@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.BitmapFactory
-import android.net.Uri
 import android.webkit.CookieManager
 import android.widget.Toast
 import androidx.compose.foundation.Image
@@ -15,17 +14,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -42,32 +42,52 @@ import androidx.compose.ui.unit.sp
 import cn.nizou.sxd.util.UserInfoStore
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Content_copy
+import com.composables.icons.materialsymbols.outlined.Refresh
+import com.composables.icons.materialsymbols.outlined.Refresh
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /**
- * 用户信息卡片：昵称/头像/ID/Cookie，点击复制 Cookie。
- * 数据：RetrofitHook 捕获的用户 JSON + Set-Cookie（UserInfoStore），叠加 WebView CookieManager
- * （https://xyks.yuanfudao.com）实时 Cookie；头像按 avatarUrl 下载。空数据也显示占位提示。
+ * 用户信息卡片：昵称/头像/ID/Cookie。
+ *
+ * 数据源：RetrofitHook 从**任意**用户信息接口响应动态提取（字段多版本兼容：nickname/nickName/userName/name、
+ * userId/userid/id、avatarUrl/headUrl/avatar/headImg，见 UserInfoStore.updateFromJson），叠加
+ * WebView CookieManager（https://xyks.yuanfudao.com）实时 Cookie；头像按 avatarUrl 下载。
+ *
+ * 2026-08-29 修复：卡片数据改为**每次重组重读 prefs**（UserInfoStore 同步读，永远最新），
+ * 不再依赖进入页面时的旧值：
+ * - 每 5 秒自动刷新（登录态/采集数据变化时模块页无需手动操作即更新）；
+ * - **点击卡片立即刷新**（重读 prefs + 重新下载头像）；
+ * - 尾随复制图标点击复制 Cookie（不再占用整卡点击）。
  */
 @Composable
 fun UserInfoCard(modifier: Modifier = Modifier) {
     val context = LocalContext.current
+
+    // 刷新触发器：点击卡片或每 5s 自动 +1 → 触发重组 → 重读所有数据源。
+    var refreshTick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(5000)
+            refreshTick++
+        }
+    }
+
+    // 每次重组都重读（prefs 是同步实时读，重组即最新；WebView Cookie 每次现取）。
     val uid = UserInfoStore.userId
     val name = UserInfoStore.userName
     val avatarUrl = UserInfoStore.avatarUrl
     val storedCookie = UserInfoStore.cookie
-    // 叠加 WebView Cookie（宿主内可读，登录态主来源）
-    val webCookie = remember {
-        runCatching { CookieManager.getInstance().getCookie("https://xyks.yuanfudao.com") }
-            .getOrDefault("") ?: ""
-    }
+    val webCookie = runCatching {
+        CookieManager.getInstance().getCookie("https://xyks.yuanfudao.com")
+    }.getOrDefault("") ?: ""
     val fullCookie = listOf(storedCookie, webCookie).filter { it.isNotBlank() }.joinToString("; ")
 
     var avatar by remember { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(avatarUrl) {
+    LaunchedEffect(avatarUrl, refreshTick) {
         if (avatarUrl.isNotBlank()) {
             avatar = withContext(Dispatchers.IO) {
                 runCatching {
@@ -87,13 +107,9 @@ fun UserInfoCard(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable {
-                    if (fullCookie.isNotBlank()) {
-                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        cm.setPrimaryClip(ClipData.newPlainText("cookie", fullCookie))
-                        Toast.makeText(context, "Cookie 已复制（${fullCookie.length} 字符）", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(context, "暂无 Cookie 可复制（请先登录小猿口算）", Toast.LENGTH_SHORT).show()
-                    }
+                    // 点击卡片 = 立即刷新用户信息
+                    refreshTick++
+                    Toast.makeText(context, "已刷新用户信息", Toast.LENGTH_SHORT).show()
                 }
                 .padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -124,7 +140,7 @@ fun UserInfoCard(modifier: Modifier = Modifier) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = if (name.isNotBlank()) name else "未采集到用户信息",
+                    text = if (name.isNotBlank()) name else "未采集到用户信息（点击刷新）",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -135,9 +151,9 @@ fun UserInfoCard(modifier: Modifier = Modifier) {
                 )
                 Text(
                     text = if (fullCookie.isNotBlank())
-                        "Cookie: ${fullCookie.take(60)}…（点击复制）"
+                        "Cookie: ${fullCookie.take(60)}…（点击复制图标）"
                     else
-                        "Cookie: 暂无（打开小猿口算后自动采集，点击刷新）",
+                        "Cookie: 暂无（打开小猿口算后自动采集）",
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -145,11 +161,36 @@ fun UserInfoCard(modifier: Modifier = Modifier) {
                 )
             }
             Spacer(Modifier.width(8.dp))
-            Icon(
-                imageVector = MaterialSymbols.Outlined.Content_copy,
-                contentDescription = "复制Cookie",
-                tint = MaterialTheme.colorScheme.primary,
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = MaterialSymbols.Outlined.Refresh,
+                    contentDescription = "刷新",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clickable {
+                            refreshTick++
+                            Toast.makeText(context, "已刷新用户信息", Toast.LENGTH_SHORT).show()
+                        },
+                )
+                Spacer(Modifier.height(6.dp))
+                Icon(
+                    imageVector = MaterialSymbols.Outlined.Content_copy,
+                    contentDescription = "复制Cookie",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clickable {
+                            if (fullCookie.isNotBlank()) {
+                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                cm.setPrimaryClip(ClipData.newPlainText("cookie", fullCookie))
+                                Toast.makeText(context, "Cookie 已复制（${fullCookie.length} 字符）", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "暂无 Cookie 可复制（请先登录小猿口算）", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                )
+            }
         }
     }
 }
