@@ -93,7 +93,7 @@ object XposedHelpers {
                 var ok = true
                 for (i in pts.indices) {
                     val argCls = argClasses[i] ?: continue // null 匹配任意引用类型
-                    if (!pts[i].isAssignableFrom(argCls)) {
+                    if (!paramMatches(pts[i], argCls)) {
                         ok = false
                         break
                     }
@@ -103,5 +103,27 @@ object XposedHelpers {
             c = c.superclass
         }
         throw NoSuchMethodException("$name(${args.size} args) in $clazz")
+    }
+
+    /**
+     * 参数类型匹配。2026-08-29 修复：旧实现仅用 `isAssignableFrom`，对**原始类型参数**的方法
+     * （如 `Response.peekBody(long)`）传包装类（`Long`）时永远匹配不上 → NoSuchMethodException →
+     * 调用方 runCatching 吞掉 → 用户信息采集（peekBody 读响应体）静默失效。
+     * 现补充：原始类型参数接受对应包装类（Java 反射 invoke 会自动拆箱）。
+     */
+    private fun paramMatches(param: Class<*>, arg: Class<*>): Boolean {
+        if (param.isAssignableFrom(arg)) return true
+        if (!param.isPrimitive) return false
+        return when (param) {
+            java.lang.Boolean.TYPE -> arg == java.lang.Boolean::class.java
+            java.lang.Byte.TYPE -> arg == java.lang.Byte::class.java
+            java.lang.Character.TYPE -> arg == java.lang.Character::class.java
+            java.lang.Short.TYPE -> arg == java.lang.Short::class.java
+            java.lang.Integer.TYPE -> arg == java.lang.Integer::class.java
+            java.lang.Long.TYPE -> arg == java.lang.Long::class.java
+            java.lang.Float.TYPE -> arg == java.lang.Float::class.java
+            java.lang.Double.TYPE -> arg == java.lang.Double::class.java
+            else -> false
+        }
     }
 }
