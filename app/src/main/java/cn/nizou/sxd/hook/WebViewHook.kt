@@ -332,7 +332,7 @@ class WebViewHook(
         var lastSchemas: Any? = null
         caller.allMethod("call").forEach { m ->
             m.also { it.isAccessible = true }.intercept("openSchema_call") { chain ->
-                if (!PK.pkCyclic) {
+                if (!PK.pkCyclic && !PK.skipRanking) {
                     return@intercept chain.proceed()
                 }
                 val arg0 = chain.getArg(0)!!
@@ -506,7 +506,8 @@ class WebViewHook(
                         curTrueAnswer?.put("pathPoints", JSONArray().put(line))
                     }
                     val questionCnt = json.getInt("questionCnt")
-                    if (mode == AutoAnswerMode.QUICK) {
+                    // 2026-08-29：结算时间覆盖扩展到 QUICK + STANDARD（用户要求覆盖面更广）
+                    if (mode == AutoAnswerMode.QUICK || mode == AutoAnswerMode.STANDARD) {
                         val appropriateCostTime = appropriateCostTime.get()
                         // 2026-08-29：外挂检测点=答题时间 0.00s 触发封禁 → costTime 必须 >= 10ms(0.01s)。
                         // 自定义结算时间（秒转毫秒）低于 limit 时也保底，绝不出现 0.00s。

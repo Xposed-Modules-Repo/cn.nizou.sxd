@@ -17,8 +17,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -34,6 +37,7 @@ import cn.nizou.sxd.ui.components.M3BackButton
 import cn.nizou.sxd.ui.components.UserInfoCard
 import cn.nizou.sxd.ui.components.M3ListScaffold
 import cn.nizou.sxd.ui.components.SegmentedColumn
+import cn.nizou.sxd.ui.components.SwitchWidget
 import cn.nizou.sxd.ui.content.FloatingBottomBar
 import cn.nizou.sxd.ui.content.FloatingBottomBarDefaults
 import cn.nizou.sxd.ui.navigation.LocalNavigator
@@ -52,6 +56,7 @@ import cn.nizou.sxd.ui.settings.SettingsScreen
 import cn.nizou.sxd.ui.theme.AutoOralTheme
 import cn.nizou.sxd.ui.theme.ThemeSettings
 import cn.nizou.sxd.util.StringRes
+import cn.nizou.sxd.util.SettingsPrefs
 import cn.nizou.sxd.util.openGithub
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Article
@@ -384,11 +389,12 @@ private fun FeaturesTab(
     onNavigate: (MainRoute) -> Unit,
     onBack: () -> Unit,
 ) {
+    var skipRanking by remember {
+        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_PK_SKIP_RANKING, false))
+    }
     val entries = remember {
         listOf(
             FeatureMenuEntry("通用", "识别/昵称通用开关", MaterialSymbols.Outlined.Tune, MainRoute.General),
-            FeatureMenuEntry("练习", "口算练习自动答题", MaterialSymbols.Outlined.Edit_note, MainRoute.Practice),
-            FeatureMenuEntry("PK", "极速/PK 自动答题", MaterialSymbols.Outlined.Bolt, MainRoute.Pk),
             FeatureMenuEntry("Debug", "调试开关", MaterialSymbols.Outlined.Bug_report, MainRoute.Debug),
             FeatureMenuEntry("关于", "版本与项目信息", MaterialSymbols.Outlined.Info, MainRoute.About),
         )
@@ -400,6 +406,12 @@ private fun FeaturesTab(
             FeatureMenuEntry("自定义结算时间", "极速结算/自定义 costTime", MaterialSymbols.Outlined.Timer, MainRoute.CustomSettle),
         )
     }
+    val experimentalEntries = remember {
+        listOf(
+            FeatureMenuEntry("练习", "口算练习自动答题（实验）", MaterialSymbols.Outlined.Edit_note, MainRoute.Practice),
+            FeatureMenuEntry("PK", "极速/PK 自动答题（实验）", MaterialSymbols.Outlined.Bolt, MainRoute.Pk),
+        )
+    }
 
     M3ListScaffold(
         title = "功能",
@@ -408,6 +420,39 @@ private fun FeaturesTab(
         item {
             SegmentedColumn(title = "自定义功能") {
                 customEntries.forEach { entry ->
+                    BaseWidget(
+                        title = entry.title,
+                        description = entry.description,
+                        icon = entry.icon,
+                        onClick = { onNavigate(entry.route) },
+                        trailingContent = {
+                            Icon(
+                                imageVector = MaterialSymbols.Outlined.Chevron_right,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        },
+                    )
+                }
+            }
+        }
+        item {
+            SegmentedColumn(title = "实验新功能") {
+                BaseWidget(
+                    title = "⚠ 大部分功能不可用",
+                    description = "仅「去除排行榜展示动效」可用",
+                )
+                SwitchWidget(
+                    title = "去除排行榜展示动效",
+                    description = "跳过 PK 结果后的排行榜展示动效（独立于循环PK）",
+                    checked = skipRanking,
+                    onCheckedChange = {
+                        skipRanking = it
+                        SettingsPrefs.writeBoolean(res, res.KEY_PK_SKIP_RANKING, it)
+                    }
+                )
+                experimentalEntries.forEach { entry ->
                     BaseWidget(
                         title = entry.title,
                         description = entry.description,

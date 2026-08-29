@@ -9,6 +9,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import cn.nizou.sxd.ui.components.M3BackButton
 import cn.nizou.sxd.ui.components.M3ListScaffold
@@ -40,13 +42,16 @@ fun CustomAnswerScreen(res: StringRes, onBack: () -> Unit) {
         )
     }
     var customAnswers by remember {
-        mutableStateOf(SettingsPrefs.readString(res, res.KEY_CUSTOM_ANSWERS, ""))
+        mutableStateOf(SettingsPrefs.readString(res, res.KEY_CUSTOM_ANSWERS, "1"))
     }
     var customTitle by remember {
-        mutableStateOf(SettingsPrefs.readString(res, res.KEY_CUSTOM_TITLE, ""))
+        mutableStateOf(SettingsPrefs.readString(res, res.KEY_CUSTOM_TITLE, "78+13=\\square"))
+    }
+    var customQuestionCount by remember {
+        mutableStateOf(SettingsPrefs.readString(res, res.KEY_CUSTOM_QUESTION_COUNT, "0"))
     }
     var practiceAnswer by remember {
-        mutableStateOf(SettingsPrefs.readString(res, res.KEY_PRACTICE_ANSWER, ""))
+        mutableStateOf(SettingsPrefs.readString(res, res.KEY_PRACTICE_ANSWER, "1"))
     }
     var vip by remember {
         mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_VIP, false))
@@ -119,6 +124,22 @@ fun CustomAnswerScreen(res: StringRes, onBack: () -> Unit) {
                         }
                     )
                 }
+            }
+        }
+
+        item {
+            SegmentedColumn(title = "题目数量") {
+                TextFieldDialogWidget(
+                    title = "自定义题目数量",
+                    value = customQuestionCount,
+                    placeholder = "0=不限制；改题目模式默认1，多题模式取前N题",
+                    keyboardType = KeyboardType.Number,
+                    filter = { it.filter { c -> c.isDigit() } },
+                    onValueChange = {
+                        customQuestionCount = it
+                        SettingsPrefs.writeString(res, res.KEY_CUSTOM_QUESTION_COUNT, it)
+                    }
+                )
             }
         }
 

@@ -115,24 +115,40 @@ class SimianHook(
 
             when {
                 Simian.modifyTitle -> {
-                    // 单题模式：只保留最后一题，改 content，answers[0] 改自定义答案
-                    val last = questions.getJSONObject(questions.length() - 1)
-                    last.put("content", Simian.title)
-                    val answers = last.getJSONArray("answers")
-                    answers.put(0, answer)
-                    last.put("answers", answers)
-                    examVO.put("questions", JSONArray().put(last))
+                    // 改题目模式：数量 = 自定义题目数量（默认 1），每道题 content=自定义题目、answers[0]=自定义答案。
+                    // 取最后一题作为模板（保留题目结构字段），深拷贝 N 份，避免共享引用。
+                    val template = questions.getJSONObject(questions.length() - 1)
+                    val count = if (Simian.customQuestionCount > 0) Simian.customQuestionCount else 1
+                    val out = JSONArray()
+                    for (i in 0 until count) {
+                        val q = JSONObject(template.toString())
+                        q.put("content", Simian.title)
+                        val answers = q.getJSONArray("answers")
+                        answers.put(0, answer)
+                        q.put("answers", answers)
+                        out.put(q)
+                    }
+                    examVO.put("questions", out)
                 }
 
                 Simian.modifyAnswer -> {
-                    // 多题模式：所有题 answers[0] 改自定义答案
-                    for (i in 0 until questions.length()) {
-                        val question = questions.getJSONObject(i)
+                    // 多题模式：先按自定义题目数量裁剪（>0 且题数多于 N 时取前 N 题），再所有题 answers[0] 改自定义答案
+                    val target = if (Simian.customQuestionCount > 0 && questions.length() > Simian.customQuestionCount) {
+                        val cut = JSONArray()
+                        for (i in 0 until Simian.customQuestionCount) {
+                            cut.put(questions.getJSONObject(i))
+                        }
+                        cut
+                    } else {
+                        questions
+                    }
+                    for (i in 0 until target.length()) {
+                        val question = target.getJSONObject(i)
                         val answers = question.getJSONArray("answers")
                         answers.put(0, answer)
                         question.put("answers", answers)
                     }
-                    examVO.put("questions", questions)
+                    examVO.put("questions", target)
                 }
             }
 

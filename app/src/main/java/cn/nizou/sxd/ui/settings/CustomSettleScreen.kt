@@ -35,7 +35,7 @@ import cn.nizou.sxd.util.StringRes
 @Composable
 fun CustomSettleScreen(res: StringRes, onBack: () -> Unit) {
     var settle by remember {
-        mutableStateOf(SettingsPrefs.readString(res, "pk_settle_time", "0"))
+        mutableStateOf(SettingsPrefs.readString(res, "pk_settle_time", "10"))
     }
     M3ListScaffold(title = "自定义结算时间", navigationIcon = { M3BackButton(onClick = onBack) }) {
         item {

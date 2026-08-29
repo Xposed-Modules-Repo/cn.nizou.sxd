@@ -26,6 +26,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import cn.nizou.sxd.Classname
 import cn.nizou.sxd.api.OralApiService
+import cn.nizou.sxd.util.PK
 import cn.nizou.sxd.util.Practice
 import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.logI
@@ -184,12 +185,13 @@ class PracticeHook(
                     val dataList = quickExercisePresenterClass.declaredFields.firstOrNull {
                         List::class.java.isAssignableFrom(it.type)
                     }?.get(thisObject) as List<*>
-                    var totalTime = 0
+                    var totalTime = 0L
                     dataList.subList(1, dataList.size - 1).forEach { data ->
                         val answers = XposedHelpers.getObjectField(data, "rightAnswers") as? List<*>
                         val answer = answers?.firstOrNull()?.toString() ?: ""
                         XposedHelpers.callMethod(data, "setUserAnswer", answer)
-                        val costTime = Random.nextInt(150, 250)
+                        val costTime = if (PK.settleTime > 0) PK.settleTime.toLong()
+                        else Random.nextInt(150, 250).toLong()
                         XposedHelpers.callMethod(data, "setCostTime", costTime)
                         XposedHelpers.callMethod(data, "setStrokes", answer.strokes)
                         totalTime += costTime
@@ -201,7 +203,7 @@ class PracticeHook(
                                 val exerciseTypeInt =
                                     XposedHelpers.getIntField(exerciseType!!, "exerciseType")
                                 val intent = activity.intent
-                                val uri = buildUri(totalTime.toLong(), dataList) as Uri
+                                val uri = buildUri(totalTime, dataList) as Uri
                                 gotoResult(activity, intent, uri, exerciseTypeInt)
                                 activity.finish()
                             }
@@ -539,7 +541,8 @@ class PracticeHook(
                 val answers = XposedHelpers.getObjectField(it, "answers") as? List<*>
                 val answer = answers?.firstOrNull()?.toString() ?: ""
                 XposedHelpers.callMethod(it, "setUserAnswer", answer)
-                val costTime = Random.nextInt(150, 250)
+                val costTime = if (PK.settleTime > 0) PK.settleTime.toLong()
+                else Random.nextInt(150, 250).toLong()
                 XposedHelpers.callMethod(it, "setCostTime", costTime)
                 XposedHelpers.callMethod(it, "setScript", answer.strokes.toJsonString())
                 XposedHelpers.callMethod(it, "setStatus", 1)

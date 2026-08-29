@@ -78,6 +78,11 @@
             android:title="循环时间间隔"
             android:inputType="number"
             android:hint="单位毫秒，默认值1500" />
+        <SwitchPreference
+            android:key="@string/key_pk_skip_ranking"
+            android:title="去除排行榜展示动效"
+            android:defaultValue="false"
+            android:summary="跳过 PK 结果后的排行榜展示动效（独立于循环PK）" />
     </PreferenceCategory>
     <PreferenceCategory android:title="Debug">
         <SwitchPreference

@@ -14,6 +14,8 @@
     <string name="key_pk_cyclic">pk_cyclic</string>
     <string name="key_pk_cyclic_interval">pk_cyclic_interval</string>
     <string name="key_pk_fast_settle">pk_fast_settle</string>
+    <string name="key_pk_skip_ranking">pk_skip_ranking</string>
+    <string name="key_custom_question_count">custom_question_count</string>
     <string name="key_github">github</string>
     <string name="key_version">version</string>
     <string name="key_goto_settings">goto_settings</string>

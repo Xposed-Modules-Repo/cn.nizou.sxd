@@ -103,16 +103,19 @@ object PK {
             }.getOrElse { 200 }
         }
 
-    /** 自定义结算时间（**毫秒**整数，如 100）。>0 时 QUICK 提交 costTime 直接用该值（毫秒）；0=按 interval 计算。 */
+    /** 自定义结算时间（**毫秒**整数，如 100）。>0 时 QUICK/STANDARD 提交 costTime 直接用该值（毫秒）；0=按 interval 计算。 */
     val settleTime: Int
         get() = runCatching {
             modulePrefs.getString("pk_settle_time", "")!!.toInt()
-        }.getOrDefault(0)
+        }.getOrDefault(10)
     val pkCyclic
         get() = mode in arrayOf(
             AutoAnswerMode.STANDARD,
             AutoAnswerMode.QUICK
         ) && modulePrefs.getBoolean(moduleStringRes.KEY_PK_CYCLIC, false)
+    /** 去除排行榜展示动效（独立开关）：跳过 motivation-honor-roll 展示，不等同于循环PK。 */
+    val skipRanking
+        get() = modulePrefs.getBoolean(moduleStringRes.KEY_PK_SKIP_RANKING, false)
     val pkCyclicInterval: Int
         get() {
             return kotlin.runCatching {
@@ -164,14 +167,20 @@ object Simian {
             }.getOrElse { 0 }
         }
 
-    /** 自定义答案（口算答案，EncryptResult 与 recognize 共用） */
-    val answers get() = modulePrefs.getString(moduleStringRes.KEY_CUSTOM_ANSWERS, "")!!
+    /** 自定义答案（口算答案，EncryptResult 与 recognize 共用），默认 "1" */
+    val answers get() = modulePrefs.getString(moduleStringRes.KEY_CUSTOM_ANSWERS, "1")!!
 
-    /** 单题模式的题目内容 */
-    val title get() = modulePrefs.getString(moduleStringRes.KEY_CUSTOM_TITLE, "")!!
+    /** 单题模式的题目内容，默认 "78+13=\\square"（Kotlin 里 \\ = 一个反斜杠，存进去是 78+13=\square） */
+    val title get() = modulePrefs.getString(moduleStringRes.KEY_CUSTOM_TITLE, "78+13=\\square")!!
 
-    /** 口算练习 QuestionVO.getAnswers 自定义答案 */
-    val practiceAnswer get() = modulePrefs.getString(moduleStringRes.KEY_PRACTICE_ANSWER, "")!!
+    /** 口算练习 QuestionVO.getAnswers 自定义答案，默认 "1" */
+    val practiceAnswer get() = modulePrefs.getString(moduleStringRes.KEY_PRACTICE_ANSWER, "1")!!
+
+    /** 自定义题目数量：>0 时把 EncryptResult 题目裁剪/扩展为 N 题（改题目模式下 N 题都显示自定义题目）；0=不限制。 */
+    val customQuestionCount: Int
+        get() = runCatching {
+            Integer.parseInt(modulePrefs.getString(moduleStringRes.KEY_CUSTOM_QUESTION_COUNT, "")!!)
+        }.getOrElse { 0 }
 
     /**
      * 自定义正确题数（自定义分数新方案，0=全对）。
@@ -184,4 +193,29 @@ object Simian {
 
     /** 解锁 VIP */
     val vip get() = modulePrefs.getBoolean(moduleStringRes.KEY_VIP, false)
+}
+
+/**
+ * 自定义分数（CustomScoreScreen）。
+ * - 刷分模式（mode=0）：增量提交获得经验（现状，服务端单次 obtainExp 有上限 ~200）。
+ * - 真自定义分数（mode=1）：一次提交多条 todayExercises 把分数直接顶到目标值（拆条绕过单次上限）。
+ */
+object Score {
+    /** 分数模式：0=刷分（增量），1=真自定义分数（一次设置目标） */
+    val mode: Int
+        get() = runCatching {
+            modulePrefs.getString("custom_score_mode", "")!!.toInt()
+        }.getOrElse { 0 }
+
+    /** 真自定义分数：目标分数（设置后 curWeekScore 一次到位） */
+    val target: Int
+        get() = runCatching {
+            modulePrefs.getString("custom_score_target", "")!!.toInt()
+        }.getOrElse { 0 }
+
+    /** 真自定义分数：单条 todayExercises 的 obtainExp 上限（服务端单条上限，默认 200） */
+    val perItem: Int
+        get() = runCatching {
+            modulePrefs.getString("custom_score_per_item", "")!!.toInt()
+        }.getOrElse { 200 }
 }

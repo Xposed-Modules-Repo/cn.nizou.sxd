@@ -61,6 +61,44 @@ object LegacyApiService {
         postSavedExpMethod.invoke(apiService, body, postSavedExp)
     }
 
+    /**
+     * 真自定义分数：一次提交多条 todayExercises（每条 obtainExp ≤ [perItemLimit]，finishTime 间隔错开
+     * 模拟真实做题），把 [totalExp] 经验一次性顶到目标。服务端单条 obtainExp 有上限（~200），
+     * 拆条可绕过「单次 200 / 每天只能刷几次」的限制——只要服务端不校验单次请求总增量。
+     */
+    fun postSavedExpBatch(totalExp: Int, perItemLimit: Int, onResult: (Result<Any>) -> Unit) {
+        if (totalExp <= 0) {
+            onResult(Result.failure(IllegalArgumentException("目标分数必须大于当前分数")))
+            return
+        }
+        val perItem = perItemLimit.coerceAtLeast(1)
+        val count = totalExp / perItem + if (totalExp % perItem != 0) 1 else 0
+        val postSavedExp = Proxy.newProxyInstance(
+            coroutineClass.classLoader,
+            arrayOf(coroutineClass),
+            ContinuationProxy(coroutineContext, onResult)
+        )
+        val sb = StringBuilder("{\"todayExercises\":[")
+        for (i in 0 until count) {
+            if (i > 0) sb.append(",")
+            sb.append("{}")
+        }
+        sb.append("]}")
+        val body = XposedHelpers.callMethod(gson, "fromJson", sb.toString(), postSavedExpBodyType)
+        val exercises = XposedHelpers.getObjectField(body, "todayExercises") as List<*>
+        val now = System.currentTimeMillis()
+        var remaining = totalExp
+        for (i in exercises.indices) {
+            val exp = minOf(remaining, perItem)
+            remaining -= exp
+            val exercise = exercises[i]
+            // finishTime 间隔 1 分钟递减，模拟一天内陆续做题
+            XposedHelpers.setLongField(exercise, "finishTime", now - i * 60_000L)
+            XposedHelpers.setIntField(exercise, "obtainExp", exp)
+        }
+        postSavedExpMethod.invoke(apiService, body, postSavedExp)
+    }
+
     fun getCurrentUserExp(onResult: (Result<Any>) -> Unit) {
         val getCurrentUserExp = Proxy.newProxyInstance(
             coroutineClass.classLoader,
