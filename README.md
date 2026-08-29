@@ -55,14 +55,14 @@
 | 项目 | 支持范围 |
 | --- | --- |
 | 宿主 App | 小猿口算 `com.fenbi.android.leo` |
-| 已测试版本 | `3.140.1`（versionCode 31400199） |
-| Android | Android 16 / API 36 |
+| 宿主版本 | **无限制**（不校验版本号；各 Hook 对目标类做存在性容错，已适配 3.140.x） |
+| Android | Android 16 / API 36（更早版本未验证） |
 | 架构 | arm64-v8a / armeabi-v7a / x86 / x86_64（universal） |
 | LSPosed | Modern API 102（npatch / Zygisk 均可） |
 | 作用域 | `com.fenbi.android.leo` |
 | Root | 需要（LSPosed 环境） |
 
-> 宿主升级后部分 Hook 点可能漂移（混淆类名 / 接口变化），模块已对常见漂移做容错，个别功能可能需要新版本适配。
+> 模块**不校验小猿口算版本号**：各 Hook 对目标类 / 方法做存在性容错（`findClassIfExists` + `runCatching`），宿主升级导致类名 / 接口漂移时自动跳过对应功能，不影响其它功能与稳定性。
 
 ## 安装与使用
 
