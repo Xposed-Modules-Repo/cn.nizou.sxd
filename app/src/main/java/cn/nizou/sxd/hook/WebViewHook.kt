@@ -57,6 +57,13 @@ class WebViewHook(
 
     private val pkPageLoaded = AtomicBoolean(false)
 
+    /**
+     * 题目答案缓存（hookDataDecrypt 从解密命令明文提取，quick.js 经 getAnswers() 读取）。
+     * 格式：JSON 数组 [{content, answer}]，按题目顺序。
+     */
+    @Volatile
+    private var answersCache: String = "[]"
+
     private val resultPageLoaded = AtomicBoolean(false)
 
     private val appropriateCostTime = AtomicLong(0L)
@@ -298,6 +305,12 @@ class WebViewHook(
                         }?.let {
                             val caller = (it.get(obj) as Map<*, *>)[dataEncryptBeanClass]!!
                             hookDataEncrypt(caller.javaClass)
+                            // 2026-08-29：hook 解密命令拿题目答案（examVO.questions[].answer），
+                            // 经 getAnswers() JS bridge 喂给 quick.js 顺序绘制（绕开 Vue 树取答案失败）。
+                            runCatching {
+                                (it.get(obj) as Map<*, *>)[findClass(Classname.DATA_DECRYPT_BEAN)]
+                                    ?.let { dec -> hookDataDecrypt(dec.javaClass) }
+                            }.onFailure { e -> logI("hookDataDecrypt setup failed: ${e.message}") }
                         }
                         count++
                     }
@@ -363,6 +376,48 @@ class WebViewHook(
     private fun getSimulateCostTime(questionCnt: Int): Long {
         val interval = PK.quickModeInterval
         return questionCnt * interval.toLong()
+    }
+
+    /** quick.js 轮询取题目答案（JSON 数组 [{content,answer}]）。 */
+    @JavascriptInterface
+    fun getAnswers(): String = answersCache
+
+    /**
+     * hook DataDecryptBean 解密命令：拦截解密结果明文（examVO.questions 带 answer），
+     * 缓存答案列表供 quick.js 顺序绘制。失败静默（可能不是 PK 数据）。
+     */
+    private fun hookDataDecrypt(caller: Class<*>) {
+        caller.allMethod("call").forEach { m ->
+            m.also { it.isAccessible = true }.intercept("dataDecrypt_call") { chain ->
+                val r = chain.proceed()
+                if (r is String && r.contains("questions") && r.contains("pkIdStr")) {
+                    runCatching {
+                        val json = JSONObject(r)
+                        val examVO = json.optJSONObject("examVO") ?: return@runCatching
+                        val questions = examVO.getJSONArray("questions")
+                        val arr = JSONArray()
+                        for (i in 0 until questions.length()) {
+                            val q = questions.getJSONObject(i)
+                            val answer = q.optString("answer").ifBlank {
+                                runCatching {
+                                    q.optJSONArray("answers")?.takeIf { it.length() > 0 }?.getString(0).orEmpty()
+                                }.getOrDefault("")
+                            }
+                            if (answer.isNotEmpty()) {
+                                arr.put(JSONObject().put("content", q.optString("content")).put("answer", answer))
+                            }
+                        }
+                        if (arr.length() > 0) {
+                            answersCache = arr.toString()
+                            logI("answers cached: ${arr.length()} questions")
+                        }
+                    }.onFailure {
+                        logI("answers parse failed: ${it.message}")
+                    }
+                }
+                r
+            }
+        }
     }
 
     private fun hookDataEncrypt(caller: Class<*>) {

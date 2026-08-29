@@ -27,6 +27,8 @@ object Classname {
 
     const val DATA_ENCRYPT_BEAN = "com.fenbi.android.leo.webapp.secure.commands.DataEncryptBean"
 
+    const val DATA_DECRYPT_BEAN = "com.fenbi.android.leo.webapp.secure.commands.DataDecryptBean"
+
     const val SIMPLE_WEB_APP_FIREWORK_ACTIVITY =
         "com.yuanfudao.android.leo.webview.ui.activity.SimpleWebAppFireworkActivity"
 
