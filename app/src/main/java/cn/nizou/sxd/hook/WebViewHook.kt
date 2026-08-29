@@ -481,7 +481,9 @@ class WebViewHook(
                         val costTime = if (PK.quickModeMustWin && appropriateCostTime > 0) {
                             appropriateCostTime
                         } else {
-                            getSimulateCostTime(questionCnt).coerceAtLeast(questionCnt * 200L)
+                            // 2026-08-29：去掉每题 200ms 下限——costTime 完全由 quickModeInterval 控制
+                            // （PkScreen 可调，默认 200，设小即接近 0 秒极速；每题最低 1ms 防 0 字段异常）。
+                            getSimulateCostTime(questionCnt).coerceAtLeast(questionCnt)
                         }
                         logI("originCostTime: ${json.get("costTime")}, costTime: $costTime")
                         json.put("costTime", costTime)
