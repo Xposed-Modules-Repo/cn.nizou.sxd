@@ -1,8 +1,8 @@
 // cyclic.js —— 循环 PK：结算页自动开下一局（Vue3 + Vue2 + 按钮 + reload 兜底）
 setTimeout(function () {
     function getInterval() {
-        return (typeof window._pk_cyclic_interval === 'number' && window._pk_cyclic_interval >= 0)
-            ? window._pk_cyclic_interval : 1500;
+        return (typeof window.pk_cyclic_interval === 'number' && window.pk_cyclic_interval >= 0)
+            ? window.pk_cyclic_interval : 1500;
     }
     function dbg(m) {
         try { if (window.AutoOral && window.AutoOral.log) window.AutoOral.log(String(m)); } catch (e) {}
