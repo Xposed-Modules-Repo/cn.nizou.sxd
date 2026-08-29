@@ -30,6 +30,12 @@ object OralApiService {
         this.coroutineContext = coroutineContext
     }
 
+    /** 是否已由宿主完成 init+setup（模块本体独立进程未注入宿主时为 false）。 */
+    fun isReady(): Boolean =
+        ::apiService.isInitialized &&
+            ::coroutineContext.isInitialized &&
+            ::coroutineClass.isInitialized
+
     fun getExamInfo(keyPointId: String, limit: Int, onResult: (Result<Any>) -> Unit) {
         val getExamInfoProxy = Proxy.newProxyInstance(
             coroutineClass.classLoader,

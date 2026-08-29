@@ -35,6 +35,14 @@ object SettingsPrefs {
         modulePrefs.edit().putString(key, value).apply()
     }
 
+    /** 无资源键版本（裸字符串键，如 custom_score_keypoint） */
+    fun readString(key: String, def: String): String =
+        modulePrefs.getString(key, def) ?: def
+
+    fun writeString(key: String, value: String) {
+        modulePrefs.edit().putString(key, value).apply()
+    }
+
     fun readInt(key: String, def: Int): Int = modulePrefs.getInt(key, def)
 
     fun writeInt(key: String, value: Int) {

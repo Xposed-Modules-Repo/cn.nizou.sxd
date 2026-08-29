@@ -14,6 +14,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -31,6 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import cn.nizou.sxd.api.LegacyApiService
+import cn.nizou.sxd.api.OralApiService
+import cn.nizou.sxd.api.ScorePump
 import cn.nizou.sxd.util.SettingsPrefs
 import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.logI
@@ -62,11 +65,11 @@ private sealed interface ScoreLoadState {
  * 自定义分数面板。
  *
  * 两种模式（prefs `custom_score_mode`，0=刷分 / 1=真自定义）：
- * - 刷分模式（保留旧逻辑）：输入增量，单条 todayExercises 提交获得经验（服务端单条 obtainExp
- *   有上限 ~200，且一天刷几次后会被服务端拒绝）。
- * - 真自定义分数：输入**目标分数**，按 [LegacyApiService.postSavedExpBatch] 一次提交多条
- *   todayExercises（每条 ≤ 单条上限，finishTime 错开模拟真实做题），把 curWeekScore 直接顶到
- *   目标值 —— 绕过「单次 200 / 刷几次就刷不了」的限制（前提：服务端不校验单次请求总增量）。
+ * - 刷分模式（保留旧逻辑）：输入增量，走 `postSavedExp`（`POST /leo-star/android/exercise/rank/login/attend`，
+ *   排行榜登录参与）。**该接口服务端限次（每天约 3 次）**——超出后被拒，属正常现象。
+ * - 真自定义分数：走**练习成绩上传主接口**（`PUT /leo-math/android/exams/v2/{examId}`，与「自动上分」
+ *   同链路，无 attend 的日限）——循环「取卷子→全对→上传」，每局后 pre-fetch 当前分数，直到 ≥ 目标。
+ *   见 [ScorePump]。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,11 +80,19 @@ fun CustomScoreScreen(onBack: () -> Unit) {
     }
     var target by remember { mutableStateOf("") }
     var directTarget by remember { mutableStateOf("") }
-    var perItem by remember {
-        mutableStateOf(SettingsPrefs.readInt("custom_score_per_item", 200).toString())
+    var keyPointId by remember {
+        mutableStateOf(SettingsPrefs.readString("custom_score_keypoint", "1"))
+    }
+    var limit by remember {
+        mutableStateOf(SettingsPrefs.readString("custom_score_limit", "30"))
+    }
+    var intervalMs by remember {
+        mutableStateOf(SettingsPrefs.readString("custom_score_interval", "2000"))
     }
     var suppose by remember { mutableStateOf<String?>(null) }
     var submitting by remember { mutableStateOf(false) }
+    var pumping by remember { mutableStateOf(false) }
+    var pumpProgress by remember { mutableStateOf("") }
     var resultMsg by remember { mutableStateOf<String?>(null) }
 
     val currentScore = (loadState as? ScoreLoadState.Success)?.score
@@ -111,6 +122,47 @@ fun CustomScoreScreen(onBack: () -> Unit) {
     }
 
     LaunchedEffect(Unit) { updateCurrentScore() }
+
+    fun startPump() {
+        val cur = currentScore ?: return
+        val goal = directTarget.toIntOrNull() ?: return
+        val kp = keyPointId.trim().ifBlank { "1" }
+        val lim = limit.toIntOrNull()?.coerceIn(1, 200) ?: 30
+        val iv = intervalMs.toLongOrNull()?.coerceIn(0, 60_000) ?: 2000L
+        if (goal <= cur) {
+            resultMsg = "目标分数必须大于当前分数（$cur）"
+            return
+        }
+        pumping = true
+        pumpProgress = "开始：当前 $cur → 目标 $goal（知识点 $kp，每局 $lim 题）"
+        resultMsg = null
+        ScorePump.pumpToTarget(
+            keyPointId = kp,
+            limit = lim,
+            settleTime = 0,
+            intervalMs = iv,
+            target = goal,
+            onProgress = { now, rounds ->
+                mainHandler.post {
+                    pumpProgress = "第 $rounds 局 · 当前 $now / $goal"
+                }
+            },
+            onDone = { r ->
+                mainHandler.post {
+                    pumping = false
+                    r.onSuccess { finalScore ->
+                        pumpProgress = ""
+                        resultMsg = "成功：已刷到 $finalScore 分"
+                        updateCurrentScore()
+                    }.onFailure { th ->
+                        pumpProgress = ""
+                        resultMsg = "已停止/失败：${th.message ?: th}"
+                        updateCurrentScore()
+                    }
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -179,7 +231,7 @@ fun CustomScoreScreen(onBack: () -> Unit) {
                 Column {
                     Text("刷分模式（增量）", style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        "每次 +N 经验。服务端单次上限约 200，一天刷几次后会被拒绝。",
+                        "每次 +N 经验（登录参与接口，服务端每天约限 3 次，超出被拒）。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -202,9 +254,9 @@ fun CustomScoreScreen(onBack: () -> Unit) {
                     }
                 )
                 Column {
-                    Text("真自定义分数（一次到位）", style = MaterialTheme.typography.bodyLarge)
+                    Text("真自定义分数（练习上传刷到目标）", style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        "直接设置目标分数，一次提交多条记录顶到目标值，绕过单次 200 限制。",
+                        "走练习成绩上传主接口（无日限），循环全对上传直到分数 ≥ 目标。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -212,7 +264,7 @@ fun CustomScoreScreen(onBack: () -> Unit) {
             }
 
             if (scoreMode == 0) {
-                // ---- 刷分模式（保留旧逻辑）----
+                // ---- 刷分模式（保留旧逻辑，postSavedExp 增量）----
                 Text(
                     text = if (suppose != null) "预计目标分数：$suppose" else "预计目标分数：${currentScore?.toString() ?: "加载中"}",
                     style = MaterialTheme.typography.bodyLarge
@@ -245,7 +297,7 @@ fun CustomScoreScreen(onBack: () -> Unit) {
                                 updateCurrentScore()
                             }.onFailure { th ->
                                 logI(th)
-                                resultMsg = "提交失败：${th.message ?: th}"
+                                resultMsg = "提交失败：${th.message ?: th}\n（该接口服务端每天约限 3 次，超限会拒绝）"
                             }
                         }
                     },
@@ -254,26 +306,13 @@ fun CustomScoreScreen(onBack: () -> Unit) {
                     Text(if (submitting) "提交中…" else "确认刷分")
                 }
             } else {
-                // ---- 真自定义分数：一次设置目标 ----
-                val perItemV = perItem.toIntOrNull()?.coerceAtLeast(1) ?: 200
-                val diff = if (currentScore != null && directTarget.toIntOrNull() != null) {
-                    directTarget.toInt() - currentScore
-                } else {
-                    null
-                }
-                val items = if (diff != null && diff > 0) {
-                    diff / perItemV + if (diff % perItemV != 0) 1 else 0
-                } else {
-                    0
-                }
+                // ---- 真自定义分数：练习批量上传刷到目标 ----
+                val apiReady = LegacyApiService.isReady() && OralApiService.isReady()
                 Text(
-                    text = when {
-                        diff == null -> "输入目标分数（须大于当前分数）"
-                        diff <= 0 -> "目标分数必须大于当前分数"
-                        else -> "差值 +$diff → 一次提交 $items 条记录（每条约 $perItemV 经验）"
-                    },
+                    text = if (!apiReady) "宿主 ApiService 未初始化，请在宿主内打开本面板"
+                    else "输入目标分数（须大于当前），开始后循环全对上传练习成绩直到达到目标",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (diff != null && diff > 0) MaterialTheme.colorScheme.primary
+                    color = if (apiReady) MaterialTheme.colorScheme.onSurfaceVariant
                     else MaterialTheme.colorScheme.error
                 )
                 OutlinedTextField(
@@ -288,36 +327,67 @@ fun CustomScoreScreen(onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = perItem,
-                    onValueChange = { perItem = it.filter { c -> c.isDigit() } },
-                    label = { Text("单条经验上限（默认 200）") },
+                    value = keyPointId,
+                    onValueChange = {
+                        keyPointId = it.filter { c -> c.isDigit() }
+                        SettingsPrefs.writeString("custom_score_keypoint", it)
+                    },
+                    label = { Text("知识点 ID（默认 1，练习页知识点）") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Button(
-                    enabled = currentScore != null && diff != null && diff > 0 && !submitting,
-                    onClick = {
-                        val d = diff ?: return@Button
-                        submitting = true
-                        resultMsg = null
-                        LegacyApiService.postSavedExpBatch(d, perItemV) {
-                            submitting = false
-                            it.onSuccess {
-                                updateCurrentScore()
-                                resultMsg = "成功：已提交 $items 条记录（+$d 经验）"
-                            }.onFailure { th ->
-                                logI(th)
-                                resultMsg = "提交失败：${th.message ?: th}\n（若被服务端拒绝，可能是单次请求总增量/每日上限，请调低单条上限或分天）"
-                            }
-                        }
+                OutlinedTextField(
+                    value = limit,
+                    onValueChange = {
+                        limit = it.filter { c -> c.isDigit() }
+                        SettingsPrefs.writeString("custom_score_limit", it)
                     },
+                    label = { Text("每局题目数（默认 30）") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (submitting) "提交中…" else "直接设置为目标分数")
+                )
+                OutlinedTextField(
+                    value = intervalMs,
+                    onValueChange = {
+                        intervalMs = it.filter { c -> c.isDigit() }
+                        SettingsPrefs.writeString("custom_score_interval", it)
+                    },
+                    label = { Text("每局间隔毫秒（默认 2000）") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (pumping) {
+                    OutlinedButton(
+                        onClick = {
+                            ScorePump.cancel()
+                            resultMsg = "已请求停止…"
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("停止刷分")
+                    }
+                } else {
+                    Button(
+                        enabled = currentScore != null && directTarget.toIntOrNull() != null && apiReady,
+                        onClick = { startPump() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("开始刷到目标分数")
+                    }
+                }
+                if (pumpProgress.isNotEmpty()) {
+                    Text(
+                        text = pumpProgress,
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
                 Text(
-                    text = "说明：拆成多条记录一次提交（finishTime 错开模拟真实做题），绕过服务端「单条 200 / 每天几次」限制。",
+                    text = "说明：循环「取卷子→全对→上传（/leo-math/android/exams/v2）」刷分，与「自动上分」同链路，" +
+                        "无登录参与接口的每天 3 次限制。每局经验由服务端按题数计算，刷到目标需若干局，期间可随时停止。",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall
                 )

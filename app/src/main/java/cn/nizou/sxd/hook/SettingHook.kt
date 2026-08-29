@@ -109,6 +109,10 @@ class SettingHook(
                     XposedHelpers.callStaticMethod(lifecycleOwnerKtClass, "getLifecycleScope", activity)
                 val coroutineContext = XposedHelpers.callMethod(scope, "getCoroutineContext")
                 LegacyApiService.setup(coroutineContext!!)
+                // 2026-08-30：练习批量上传刷分（ScorePump）也要用宿主协程上下文，注入面板内一并初始化
+                runCatching { OralApiService.setup(coroutineContext!!) }.onFailure {
+                    logI("OralApiService.setup failed: ${it.message}")
+                }
 
                 addSectionItems(activity, sectionItemConstructor)
                 r
