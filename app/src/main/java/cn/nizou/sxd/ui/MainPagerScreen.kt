@@ -42,6 +42,7 @@ import cn.nizou.sxd.ui.navigation.rememberM3NavEffects
 import cn.nizou.sxd.ui.settings.AboutScreen
 import cn.nizou.sxd.ui.settings.CustomAnswerScreen
 import cn.nizou.sxd.ui.settings.CustomScoreScreen
+import cn.nizou.sxd.ui.settings.CustomSettleScreen
 import cn.nizou.sxd.ui.settings.DebugScreen
 import cn.nizou.sxd.ui.settings.GeneralScreen
 import cn.nizou.sxd.ui.settings.LogsScreen
@@ -64,6 +65,7 @@ import com.composables.icons.materialsymbols.outlined.Home
 import com.composables.icons.materialsymbols.outlined.Info
 import com.composables.icons.materialsymbols.outlined.Open_in_new
 import com.composables.icons.materialsymbols.outlined.Settings
+import com.composables.icons.materialsymbols.outlined.Timer
 import com.composables.icons.materialsymbols.outlined.Tune
 import com.composables.icons.materialsymbols.outlinedfilled.Article
 import com.composables.icons.materialsymbols.outlinedfilled.Home
@@ -96,6 +98,8 @@ sealed interface MainRoute : NavKey {
     data object CustomScore : MainRoute
     @Serializable
     data object CustomAnswer : MainRoute
+    @Serializable
+    data object CustomSettle : MainRoute
     @Serializable
     data object Debug : MainRoute
     @Serializable
@@ -178,6 +182,9 @@ fun MainPagerScreen(
                 }
                 entry<MainRoute.CustomAnswer>(swipeDismiss = NavSwipeDirection.LeftToRight) {
                     CustomAnswerScreen(res, onBack = { navigator.pop() })
+                }
+                entry<MainRoute.CustomSettle>(swipeDismiss = NavSwipeDirection.LeftToRight) {
+                    CustomSettleScreen(onBack = { navigator.pop() })
                 }
                 entry<MainRoute.Debug>(swipeDismiss = NavSwipeDirection.LeftToRight) {
                     DebugScreen(res, onBack = { navigator.pop() })
@@ -382,10 +389,15 @@ private fun FeaturesTab(
             FeatureMenuEntry("通用", "识别/昵称通用开关", MaterialSymbols.Outlined.Tune, MainRoute.General),
             FeatureMenuEntry("练习", "口算练习自动答题", MaterialSymbols.Outlined.Edit_note, MainRoute.Practice),
             FeatureMenuEntry("PK", "极速/PK 自动答题", MaterialSymbols.Outlined.Bolt, MainRoute.Pk),
-            FeatureMenuEntry("自定义分数", "刷取指定分数", MaterialSymbols.Outlined.Exposure_plus_1, MainRoute.CustomScore),
-            FeatureMenuEntry("自定义答案", "改题目/改答案/口算答案", MaterialSymbols.Outlined.Edit, MainRoute.CustomAnswer),
             FeatureMenuEntry("Debug", "调试开关", MaterialSymbols.Outlined.Bug_report, MainRoute.Debug),
             FeatureMenuEntry("关于", "版本与项目信息", MaterialSymbols.Outlined.Info, MainRoute.About),
+        )
+    }
+    val customEntries = remember {
+        listOf(
+            FeatureMenuEntry("自定义分数", "刷取指定分数", MaterialSymbols.Outlined.Exposure_plus_1, MainRoute.CustomScore),
+            FeatureMenuEntry("自定义答案", "改题目/改答案/口算答案", MaterialSymbols.Outlined.Edit, MainRoute.CustomAnswer),
+            FeatureMenuEntry("自定义结算时间", "极速结算/自定义 costTime", MaterialSymbols.Outlined.Timer, MainRoute.CustomSettle),
         )
     }
 
@@ -394,7 +406,27 @@ private fun FeaturesTab(
         navigationIcon = { M3BackButton(onClick = onBack) },
     ) {
         item {
-            SegmentedColumn(title = "功能菜单") {
+            SegmentedColumn(title = "自定义功能") {
+                customEntries.forEach { entry ->
+                    BaseWidget(
+                        title = entry.title,
+                        description = entry.description,
+                        icon = entry.icon,
+                        onClick = { onNavigate(entry.route) },
+                        trailingContent = {
+                            Icon(
+                                imageVector = MaterialSymbols.Outlined.Chevron_right,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        },
+                    )
+                }
+            }
+        }
+        item {
+            SegmentedColumn(title = "功能") {
                 entries.forEach { entry ->
                     BaseWidget(
                         title = entry.title,
