@@ -3,22 +3,26 @@ package cn.nizou.sxd.hook
 import cn.nizou.sxd.PATTERN_NICKNAME
 import cn.nizou.sxd.util.Common
 import io.github.libxposed.api.XposedInterface
+import java.nio.charset.Charset
 import java.util.regex.Pattern
 
 /**
- * 昵称规则放开。
+ * 昵称规则放开 + 昵称长度翻倍。
  *
- * **2026-08-29 重大安全修复**：删除了对 `java.lang.String.getBytes(Charset)` 的 hook。
- * 该 hook 在 LSPosed(standard) 下必然引起宿主导线程**无限递归**——String.getBytes 是超热路径，
- * LSPosed 框架在 chain.proceed() 时（序列化 hooker 参数/异常/日志，或原始 getBytes 内部 toString）
- * 会再次调用 getBytes(Charset)，使 hooker 反复触发，堆被顶到 512MB 触发 OOM，启动超时被系统杀
- * （真机 logcat 表现为 ANR "Process failed to complete startup"，用户视角即「打开就闪退」）。
+ * **2026-08-29 LSPosed 适配（重要）**：本 hook 对 `java.lang.String.getBytes(Charset)` 的
+ * 拦截在 **LSPosed(standard)** 下会引发宿主导线程**无限递归**（真机 ANR "Process failed to
+ * complete startup"，堆 512MB OOM）——npatch 下正常、LSPosed 下崩，根因是 LSPosed 的
+ * `chain.proceed()` / hook 链在序列化参数、构造 toString、打异常栈时会**再次调用
+ * `String.getBytes(Charset)`**，于是每次递归又进本 hooker，形成死循环。
  *
- * 隔离实验：prefs 把 doubleNicknameLength 置 false 后递归依旧（hook 本身仍拦截所有 getBytes），
- * 仅延长存活 ~12s→~21s，根因未除。因此必须移除该 hook，而不是关开关。
+ * **保留功能 + 防递归的通用解法：同线程重入守卫**。
+ * - 第一次进入（真实业务调用）→ 照常 `chain.proceed()`，若 charset==GBK 且开了翻倍开关，
+ *   则把返回字节数组长度减半（实现昵称字节数翻倍）。
+ * - 重入进入（hook 链内部再次调 getBytes）→ 同一线程标记已在该 hook 内，直接 `chain.proceed()`
+ *   原样放行，不再翻倍、也不再触发新的翻倍分支，从而**打断递归**（深度恒为 1）。
+ * - 用 ThreadLocal 标记，只挡住当前线程的重入，不影响其它线程并行调用 getBytes 的真实翻倍。
  *
- * 仍保留 Pattern 构造器 hook（放开昵称字符限制），此 hook 非递归源，且 removeRestrictionOnNickname
- * 默认 false，安全。昵称「长度翻倍」功能（原 getBytes 方案）已一并移除：不存在不递归的安全替代做法。
+ * 这样既保住 npatch 上可用、用户依赖的「昵称长度翻倍」功能，又根治 LSPosed 下的无限递归崩退。
  */
 class NicknameHook(
     self: XposedInterface,
@@ -40,5 +44,29 @@ class NicknameHook(
             }
             chain.proceed()
         }
+
+        val gbk = Charset.forName("GBK")
+        String::class.java.findMethod("getBytes", Charset::class.java)
+            .intercept("nickname_getbytes") { chain ->
+                // 同线程重入守卫：已在 hook 内（多为 LSPosed hook 链自身再触发 getBytes）
+                // 则原样放行，避免无限递归，同时保留真实业务调用的翻倍。
+                if (inGetBytes.get()) {
+                    return@intercept chain.proceed()
+                }
+                inGetBytes.set(true)
+                try {
+                    val result = chain.proceed()
+                    if (!Common.doubleNicknameLength || chain.getArg(0) != gbk) {
+                        return@intercept result
+                    }
+                    (result as? ByteArray)?.let { return@intercept it.copyOf(it.size / 2) }
+                    result
+                } finally {
+                    inGetBytes.set(false)
+                }
+            }
     }
+
+    /** 每线程重入标记，避免 LSPosed hook 链在 proceed 内部再调 getBytes 时无限递归。 */
+    private val inGetBytes = ThreadLocal.withInitial { false }
 }

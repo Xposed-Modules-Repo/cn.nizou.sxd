@@ -108,13 +108,23 @@ setTimeout(function () {
         return any;
     }
     // ---------- 主循环：getAnswers 顺序绘制（1.6s/题） ----------
+    // 画一条「真实连续线段」：多点密集、带轻微抖动，形成完整笔画（防外挂「单点」检测）。
     function drawVerticalLine() {
         var c = findCanvas();
         if (!c) return false;
         var rect = c.getBoundingClientRect();
         if (rect.width < 10 || rect.height < 10) return false;
         var cx = rect.left + rect.width * 0.5;
-        var pts = [[cx, rect.top + rect.height * 0.3], [cx + 2, rect.top + rect.height * 0.45], [cx + 1, rect.top + rect.height * 0.6], [cx, rect.top + rect.height * 0.75]];
+        var top = rect.top + rect.height * 0.28;
+        var bot = rect.top + rect.height * 0.78;
+        var n = 22; // 密集点，构成连续线段而非单点
+        var pts = [];
+        for (var i = 0; i < n; i++) {
+            var t = i / (n - 1);
+            var x = cx + Math.sin(t * Math.PI) * 2 + (i % 2 === 0 ? 0.4 : -0.4);
+            var y = top + t * (bot - top);
+            pts.push([x, y]);
+        }
         for (var i = 0; i < pts.length; i++) {
             var type = i === 0 ? 'pointerdown' : (i === pts.length - 1 ? 'pointerup' : 'pointermove');
             try {

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.res.AssetManager
 import android.content.res.Resources
 import android.util.Log
+import cn.nizou.sxd.HOST_PACKAGE_NAME
 import cn.nizou.sxd.MODULE_PREFS_NAME
 import cn.nizou.sxd.hook.BaseHook
 import cn.nizou.sxd.util.HookStatus
@@ -42,7 +43,11 @@ class XposedInit : XposedModule() {
             Log.e("AutoOral", "createModuleResources failed, fallback system resources", e)
             Resources.getSystem()
         }
-        HookStatus.markLocalActive()
+        // 激活标记：只在宿主进程 onModuleLoaded 时置位本进程标记（作为 RemotePreferences 失败时的兜底）。
+        // 模块自身进程（独立设置页/主界面）不应误置 true，否则激活卡片永远显绿。
+        if (param.processName == HOST_PACKAGE_NAME) {
+            HookStatus.markLocalActive()
+        }
         log(
             Log.INFO, "AutoOral",
             "event=module_loaded process=${param.processName} api=${apiVersion} framework=${frameworkName}"

@@ -377,6 +377,28 @@ class WebViewHook(
         }
     }
 
+    /**
+     * 生成一条「真实连续线段」手写笔画（多点密集，含起笔/抬笔），供提交包 script/pathPoints 使用。
+     *
+     * 外挂检测点 = 答案只有单个点而非线段：若提交包 pathPoints 只有 1~3 个稀疏点，
+     * 服务端会判定为「未作画 / 单点异常」。此方法沿一条略微弯曲的竖线生成 ~24 个连续点
+     * （x 带轻微摆动、y 递增、首尾端点明确），构成完整笔画，避免被判单点。
+     */
+    private fun buildStrokeLine(): JSONArray {
+        val pts = JSONArray()
+        val x0 = 40.0
+        val y0 = 30.0
+        val n = 24
+        for (i in 0 until n) {
+            val t = i.toDouble() / (n - 1)
+            // x 轻微左右摆动（模拟手写抖动），y 平滑下移，形成连续长线段
+            val x = x0 + Math.sin(t * Math.PI) * 2.0 + (if (i % 2 == 0) 0.4 else -0.4)
+            val y = y0 + t * 60.0
+            pts.put(JSONObject().put("x", x).put("y", y))
+        }
+        return pts
+    }
+
     private fun getSimulateCostTime(questionCnt: Int): Long {
         val interval = PK.quickModeInterval
         return questionCnt * interval.toLong()
@@ -474,14 +496,10 @@ class WebViewHook(
                         } else if (!shouldCorrect) {
                             question.put("status", 0)
                         }
-                        // 2026-08-29 用户方案（画竖线不触发风控）：给提交包补一条竖线手写笔画
-                        // （script/pathPoints）。即使前端未绘制/未记录，提交包也有手写痕迹，
-                        // 避免服务端以「无手写 / 全对异常」判外挂导致结算不了。
-                        val line = JSONArray().apply {
-                            put(JSONObject().put("x", 40.0).put("y", 40.0))
-                            put(JSONObject().put("x", 41.5).put("y", 60.0))
-                            put(JSONObject().put("x", 40.5).put("y", 80.0))
-                        }
+                        // 2026-08-29 用户方案（画竖线不触发风控）：给提交包补一条**真实连续线段**手写笔画。
+                        // 外挂检测点是「答案只有单个点而非线段」——必须生成多点密集的连续笔画路径
+                        // （几十个点随 x/y 平滑前移），让服务端识别为真实手写，而非单点/稀疏断点。
+                        val line = buildStrokeLine()
                         if (!question.has("script") || question.optString("script").isBlank()) {
                             question.put("script", JSONArray().put(line).toString())
                         }
@@ -490,15 +508,14 @@ class WebViewHook(
                     val questionCnt = json.getInt("questionCnt")
                     if (mode == AutoAnswerMode.QUICK) {
                         val appropriateCostTime = appropriateCostTime.get()
-                        val costTime = if (PK.quickModeMustWin && appropriateCostTime > 0) {
-                            appropriateCostTime
-                        } else if (PK.settleTime > 0) {
-                            // 2026-08-29：自定义结算时间（PkScreen 设置，毫秒，可设 0 秒附近极速）
-                            PK.settleTime.toLong()
-                        } else {
-                            // 默认：questionCnt × quickModeInterval（去掉每题 200ms 下限，PkScreen 可调）
-                            getSimulateCostTime(questionCnt).coerceAtLeast(questionCnt.toLong())
-                        }
+                        // 2026-08-29：外挂检测点=答题时间 0.00s 触发封禁 → costTime 必须 >= 10ms(0.01s)。
+                        // 自定义结算时间（秒转毫秒）低于 limit 时也保底，绝不出现 0.00s。
+                        val settleMs = if (PK.settleTime > 0) PK.settleTime.toLong() else 0L
+                        val costTime = when {
+                            PK.quickModeMustWin && appropriateCostTime > 0 -> appropriateCostTime
+                            settleMs > 0 -> settleMs
+                            else -> getSimulateCostTime(questionCnt).coerceAtLeast(questionCnt.toLong())
+                        }.coerceAtLeast(10L) // 最短 0.01s，防 0.00s 判外挂
                         logI("originCostTime: ${json.get("costTime")}, costTime: $costTime")
                         json.put("costTime", costTime)
                     }

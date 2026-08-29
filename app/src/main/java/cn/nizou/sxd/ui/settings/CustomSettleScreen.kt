@@ -52,7 +52,7 @@ fun CustomSettleScreen(res: StringRes, onBack: () -> Unit) {
                     }
                 )
                 Text(
-                    text = "说明：秒结算(QUICK)模式下，提交包的 costTime 直接使用该值（秒转毫秒）。\n填 0 则按「模拟答题间隔 × 题目数」计算。\n极速值（如 0.1 秒）需配合已开启的秒结算使用。",
+                    text = "说明：秒结算(QUICK)模式下，提交包的 costTime 直接使用该值（秒转毫秒）。\n填 0 则按「模拟答题间隔 × 题目数」计算。\n注意：答题时间 0.00s 会触发服务端外挂检测（封禁），已强制保底最短 0.01 秒。",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
