@@ -117,6 +117,12 @@ object PK {
                 Integer.parseInt(modulePrefs.getString(moduleStringRes.KEY_PK_CYCLIC_INTERVAL, "")!!)
             }.getOrElse { 1500 }
         }
+
+    /** 循环 PK 方案：0=发包（hook 改提交包全对，cyclic 只刷新进下一局）；1=模拟点击结果页「继续 PK」。 */
+    val pkCyclicMode: Int
+        get() = kotlin.runCatching {
+            Integer.parseInt(modulePrefs.getString("pk_cyclic_mode", "1")!!)
+        }.getOrElse { 1 }
 }
 
 object Debug {

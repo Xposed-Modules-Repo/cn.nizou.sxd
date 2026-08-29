@@ -49,9 +49,15 @@ setTimeout(function () {
         return false;
     }
     function triggerAgainNow() {
+        var mode = (typeof window.pk_cyclic_mode === 'number') ? window.pk_cyclic_mode : 1;
+        if (mode === 0) {
+            // 发包方案：hook 已改提交包全对，这里直接刷新进下一局（不点按钮）
+            dbg('[cyclic] packet mode -> reload');
+            setTimeout(function () { try { window.location.reload(); } catch (e) {} }, getInterval());
+            return;
+        }
         if (strategyVue()) { dbg('[cyclic] vue strategy ok'); return; }
         if (strategyButton()) { dbg('[cyclic] button strategy ok'); return; }
-        // 兜底：连点几次后 reload（openSchema 兜底接管跳转）
         setTimeout(function () { try { window.location.reload(); } catch (e) {} }, 900);
     }
     // 结果页就绪后多次尝试（按钮可能延迟渲染），最多 ~15s

@@ -278,6 +278,7 @@ class WebViewHook(
         val webView = webView ?: return
         webView.post {
             injectConfig(loadUrl, webView, "pk_cyclic_interval", PK.pkCyclicInterval)
+            injectConfig(loadUrl, webView, "pk_cyclic_mode", PK.pkCyclicMode)
 
             if (PK.pkCyclic) {
                 injectJsCode(cyclicJs, loadUrl, webView)
@@ -473,9 +474,18 @@ class WebViewHook(
                         } else if (!shouldCorrect) {
                             question.put("status", 0)
                         }
-                        // 2026-08-29：**不再注入 pathPoints/script**——native 库缺失时是空数组，
-                        // 反而把前端真实手写笔画覆盖成 []。提交包只改 userAnswer/status，
-                        // 笔画像素数据（script/pathPoints）原样保留前端绘制（真实手写，防检测）。
+                        // 2026-08-29 用户方案（画竖线不触发风控）：给提交包补一条竖线手写笔画
+                        // （script/pathPoints）。即使前端未绘制/未记录，提交包也有手写痕迹，
+                        // 避免服务端以「无手写 / 全对异常」判外挂导致结算不了。
+                        val line = JSONArray().apply {
+                            put(JSONObject().put("x", 40.0).put("y", 40.0))
+                            put(JSONObject().put("x", 41.5).put("y", 60.0))
+                            put(JSONObject().put("x", 40.5).put("y", 80.0))
+                        }
+                        if (!question.has("script") || question.optString("script").isBlank()) {
+                            question.put("script", JSONArray().put(line).toString())
+                        }
+                        curTrueAnswer?.put("pathPoints", JSONArray().put(line))
                     }
                     val questionCnt = json.getInt("questionCnt")
                     if (mode == AutoAnswerMode.QUICK) {

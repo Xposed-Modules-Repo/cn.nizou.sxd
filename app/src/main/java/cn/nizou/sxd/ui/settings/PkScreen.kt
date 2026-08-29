@@ -47,6 +47,9 @@ fun PkScreen(res: StringRes, onBack: () -> Unit) {
     var pkCyclicInterval by remember {
         mutableStateOf(SettingsPrefs.readString(res, res.KEY_PK_CYCLIC_INTERVAL, "1500"))
     }
+    var pkCyclicMode by remember {
+        mutableStateOf(SettingsPrefs.readString(res, "pk_cyclic_mode", "1"))
+    }
 
     val mode = AutoAnswerMode.entries.getOrElse(autoAnswerConfigIndex) { AutoAnswerMode.DISABLE }
 
@@ -118,6 +121,17 @@ fun PkScreen(res: StringRes, onBack: () -> Unit) {
                     onValueChange = {
                         pkCyclicInterval = it
                         SettingsPrefs.writeString(res, res.KEY_PK_CYCLIC_INTERVAL, it)
+                    }
+                )
+                SwitchWidget(
+                    title = "循环PK用模拟点击",
+                    description = "开=结果页模拟点击「继续PK」；关=发包方案(提交全对后刷新进下一局)",
+                    enabled = pkCyclic,
+                    checked = pkCyclicMode != "0",
+                    onCheckedChange = {
+                        val v = if (it) "1" else "0"
+                        pkCyclicMode = v
+                        SettingsPrefs.writeString(res, "pk_cyclic_mode", v)
                     }
                 )
                 SwitchWidget(

@@ -108,25 +108,38 @@ setTimeout(function () {
         return any;
     }
     // ---------- 主循环：getAnswers 顺序绘制（1.6s/题） ----------
+    function drawVerticalLine() {
+        var c = findCanvas();
+        if (!c) return false;
+        var rect = c.getBoundingClientRect();
+        if (rect.width < 10 || rect.height < 10) return false;
+        var cx = rect.left + rect.width * 0.5;
+        var pts = [[cx, rect.top + rect.height * 0.3], [cx + 2, rect.top + rect.height * 0.45], [cx + 1, rect.top + rect.height * 0.6], [cx, rect.top + rect.height * 0.75]];
+        for (var i = 0; i < pts.length; i++) {
+            var type = i === 0 ? 'pointerdown' : (i === pts.length - 1 ? 'pointerup' : 'pointermove');
+            try {
+                c.dispatchEvent(new PointerEvent(type, {
+                    bubbles: true, cancelable: true, composed: true,
+                    pointerId: 1, pointerType: 'touch', isPrimary: true, pressure: 0.5,
+                    clientX: pts[i][0], clientY: pts[i][1], button: 0, buttons: type === 'pointerup' ? 0 : 1
+                }));
+            } catch (e) {}
+        }
+        return true;
+    }
+    // 2026-08-29 用户方案：画竖线（手写痕迹，非点击不触发风控），触发前端 recognize 记录路径。
+    // 判对/发包由 hookDataEncrypt 提交兜底（答案全 hook 成 1 / status=1 / 补竖线笔画）完成。
     function tryDraw() {
         tries++;
-        fetchAnswers();
         if (tries % 5 === 0) {
-            dbg('[quick] try #' + tries + ' ans=' + ANSWERS.length + ' canvas=' + (findCanvas()?1:0) + ' idx=' + idx);
+            dbg('[quick] try #' + tries + ' canvas=' + (findCanvas()?1:0) + ' drawn=' + drawn);
         }
-        if (!ANSWERS.length) { idx = 0; return; }
-        if (idx >= ANSWERS.length) idx = ANSWERS.length - 1;
-        var ans = ANSWERS[idx];
-        if (!ans) return;
-        var answer = customOrAnswer(ans.answer);
         var now = Date.now();
-        if (answer === lastDrawAnswer && now - lastDrawAt < 1600) return;
-        if (drawAnswer(answer)) {
+        if (now - lastDrawAt < 1600) return;
+        if (drawVerticalLine()) {
             lastDrawAt = now;
-            lastDrawAnswer = answer;
             drawn++;
-            idx++;
-            dbg('[quick] drew #' + (idx - 1) + ': ' + answer + ' (total ' + drawn + ', tries ' + tries + ')');
+            dbg('[quick] drew line #' + drawn + ' (tries ' + tries + ')');
         }
     }
     // 屏蔽 H5 检测弹窗（alert/confirm）——外挂行为检测概率出现时的兜底
