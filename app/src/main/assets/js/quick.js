@@ -108,6 +108,9 @@ setTimeout(function () {
     function tryDraw() {
         tries++;
         fetchAnswers();
+        if (tries % 5 === 0) {
+            dbg('[quick] try #' + tries + ' ans=' + ANSWERS.length + ' canvas=' + (findCanvas()?1:0) + ' idx=' + idx);
+        }
         if (!ANSWERS.length) { idx = 0; return; }
         if (idx >= ANSWERS.length) idx = ANSWERS.length - 1;
         var ans = ANSWERS[idx];
