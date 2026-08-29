@@ -40,7 +40,8 @@ object ScorePump {
     /**
      * 刷到目标分数。
      *
-     * @param keyPointId 练习知识点 ID（QuickExerciseActivity model 字段 a；默认 1，可在 UI 调）
+     * @param keyPointId 练习知识点 ID（PracticeHook 在练习页 onCreate 自动记录到
+     *   prefs `custom_score_keypoint`，UI 读取；留空会提示先开一局练习）
      * @param limit 每局题目数（默认 30）
      * @param settleTime 每题 costTime 毫秒（>0 用该值，否则随机 150~250）
      * @param intervalMs 每局间隔（防频率风控）
@@ -51,7 +52,6 @@ object ScorePump {
     fun pumpToTarget(
         keyPointId: String,
         limit: Int,
-        settleTime: Int,
         intervalMs: Long,
         target: Int,
         onProgress: (currentScore: Int, rounds: Int) -> Unit,
@@ -88,7 +88,7 @@ object ScorePump {
                             return@thread
                         }
                     val examId = XposedHelpers.getObjectField(examVO, "idString").toString()
-                    buildFullCorrect(examVO, settleTime)
+                    buildFullCorrect(examVO)
                     if (!upload(examId, examVO)) {
                         onDone(
                             Result.failure(
@@ -116,16 +116,16 @@ object ScorePump {
 
     /**
      * 全对填充 ExamVO（复用 PracticeHook.buildExamResult 逻辑：答案/画线/status=1/correctCnt）。
+     * 每题 costTime 随机 300~450ms（**练习提交必须 ≥0.3s**，服务端验证下限；不引用 PK.settleTime）。
      */
-    private fun buildFullCorrect(examVO: Any, settleTime: Int) {
+    private fun buildFullCorrect(examVO: Any) {
         val questions = XposedHelpers.getObjectField(examVO, "questions") as? List<*>
         var totalTime = 0L
         questions?.forEach {
             val answers = XposedHelpers.getObjectField(it, "answers") as? List<*>
             val answer = answers?.firstOrNull()?.toString() ?: ""
             XposedHelpers.callMethod(it, "setUserAnswer", answer)
-            val costTime =
-                if (settleTime > 0) settleTime.toLong() else Random.nextLong(150, 250)
+            val costTime = Random.nextLong(300, 450)
             XposedHelpers.callMethod(it, "setCostTime", costTime)
             // 手写笔画（真实连续线段，防「单点/无手写」风控）
             XposedHelpers.callMethod(it, "setScript", answer.strokes.toJsonString())

@@ -26,8 +26,8 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import cn.nizou.sxd.Classname
 import cn.nizou.sxd.api.OralApiService
-import cn.nizou.sxd.util.PK
 import cn.nizou.sxd.util.Practice
+import cn.nizou.sxd.util.SettingsPrefs
 import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.logI
 import cn.nizou.sxd.util.mainHandler
@@ -190,8 +190,9 @@ class PracticeHook(
                         val answers = XposedHelpers.getObjectField(data, "rightAnswers") as? List<*>
                         val answer = answers?.firstOrNull()?.toString() ?: ""
                         XposedHelpers.callMethod(data, "setUserAnswer", answer)
-                        val costTime = if (PK.settleTime > 0) PK.settleTime.toLong()
-                        else Random.nextInt(150, 250).toLong()
+                        // 2026-08-30：练习提交 costTime 每道题必须 ≥0.3s，否则服务端验证不过
+                        // （不引用 PK.settleTime——那是 PK 秒结算语义，默认 10ms 会违反练习下限）
+                        val costTime = Random.nextLong(300, 450)
                         XposedHelpers.callMethod(data, "setCostTime", costTime)
                         XposedHelpers.callMethod(data, "setStrokes", answer.strokes)
                         totalTime += costTime
@@ -375,6 +376,11 @@ class PracticeHook(
                 val keyPointId = XposedHelpers.getIntField(model, "a").toString()
                 val limit = XposedHelpers.getIntField(model, "c")
 
+                // 2026-08-30：自动记录本次练习的知识点 ID → 供「真自定义分数」默认使用
+                // （ScorePump 取最近一次练习的知识点，避免用户手动填错）
+                runCatching { SettingsPrefs.writeString("custom_score_keypoint", keyPointId) }
+                    .onFailure { logI("record keypointId failed: ${it.message}") }
+
                 OralApiService.setup(coroutineContext!!)
                 if (Practice.autoHonor) {
                     //                testDelay(keyPointId, limit)
@@ -541,8 +547,8 @@ class PracticeHook(
                 val answers = XposedHelpers.getObjectField(it, "answers") as? List<*>
                 val answer = answers?.firstOrNull()?.toString() ?: ""
                 XposedHelpers.callMethod(it, "setUserAnswer", answer)
-                val costTime = if (PK.settleTime > 0) PK.settleTime.toLong()
-                else Random.nextInt(150, 250).toLong()
+                // 练习提交 costTime 每题 ≥0.3s（服务端验证下限）
+                val costTime = Random.nextLong(300, 450)
                 XposedHelpers.callMethod(it, "setCostTime", costTime)
                 XposedHelpers.callMethod(it, "setScript", answer.strokes.toJsonString())
                 XposedHelpers.callMethod(it, "setStatus", 1)
