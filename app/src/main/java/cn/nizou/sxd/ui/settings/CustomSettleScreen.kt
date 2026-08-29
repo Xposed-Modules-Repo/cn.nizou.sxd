@@ -30,7 +30,7 @@ import cn.nizou.sxd.ui.components.TextFieldDialogWidget
 import cn.nizou.sxd.util.SettingsPrefs
 import cn.nizou.sxd.util.StringRes
 
-/** 自定义结算时间：设置 QUICK 提交 costTime（毫秒，0=按模拟答题间隔算）。 */
+/** 自定义结算时间：设置 QUICK 提交 costTime（**毫秒**，0=按模拟答题间隔算）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomSettleScreen(res: StringRes, onBack: () -> Unit) {
@@ -41,18 +41,18 @@ fun CustomSettleScreen(res: StringRes, onBack: () -> Unit) {
         item {
             SegmentedColumn(title = "结算时间") {
                 TextFieldDialogWidget(
-                    title = "结算用时 (秒)",
+                    title = "结算用时 (毫秒)",
                     value = settle,
-                    placeholder = "秒，可带小数，如 2.5；0=默认（按模拟答题间隔）",
-                    keyboardType = KeyboardType.Decimal,
-                    filter = { it.filter { c -> c.isDigit() || c == '.' } },
+                    placeholder = "毫秒，如 100；0=默认（按模拟答题间隔）；最短 10 (0.01s)",
+                    keyboardType = KeyboardType.Number,
+                    filter = { it.filter { c -> c.isDigit() } },
                     onValueChange = {
                         settle = it
                         SettingsPrefs.writeString(res, "pk_settle_time", it)
                     }
                 )
                 Text(
-                    text = "说明：秒结算(QUICK)模式下，提交包的 costTime 直接使用该值（秒转毫秒）。\n填 0 则按「模拟答题间隔 × 题目数」计算。\n注意：答题时间 0.00s 会触发服务端外挂检测（封禁），已强制保底最短 0.01 秒。",
+                    text = "说明：秒结算(QUICK)模式下，提交包的 costTime 直接使用该值（毫秒）。\n填 0 则按「模拟答题间隔 × 题目数」计算。\n注意：答题时间 0.00s 会触发服务端外挂检测（封禁），已强制保底最短 0.01 秒（即 10 毫秒）。",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
