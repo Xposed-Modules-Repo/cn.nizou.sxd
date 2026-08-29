@@ -19,6 +19,7 @@ import cn.nizou.sxd.util.pathPoints
 import cn.nizou.sxd.util.toJSONArray
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedInterface.HookHandle
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.lang.ref.WeakReference
