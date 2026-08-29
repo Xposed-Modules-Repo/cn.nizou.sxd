@@ -1,5 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -14,7 +15,7 @@ fun gitShortHash(): String = providers.exec {
 
 // 版本状态文件（仓库根 version.properties）：CI 每次成功构建后 +1 提交回 main。
 // 构建时可用 -PversionCode=.. -PversionName=.. 覆盖（ci.yml 自增 / release.yml tag 版本）。
-val versionProps = java.util.Properties().apply {
+val versionProps = Properties().apply {
     val f = file("version.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
