@@ -65,10 +65,15 @@ jobs:
           if-no-files-found: warn
 
   # ---- Job 2: 未签名 Release 构建（PR/手动预览用）----
+  # 版本自增：读 version.properties 当前版本，+1 后构建（本次产物即新版本，如 1.7.3 → 1.7.4）；
+  # 版本提交由 bump-version job 在**构建成功后**执行 —— 失败不消耗版本号（重试仍构建同一新版本）。
   build:
     name: Build (unsigned)
     needs: lint-and-test
     runs-on: ubuntu-latest
+    outputs:
+      versionName: ${{ steps.next-version.outputs.versionName }}
+      versionCode: ${{ steps.next-version.outputs.versionCode }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -83,9 +88,21 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
+      - name: Compute next version
+        id: next-version
+        run: |
+          set -euo pipefail
+          VC=$(grep -oP '^versionCode=\K\d+' version.properties | head -1)
+          VN=$(grep -oP '^versionName=\K.*' version.properties | head -1)
+          NVC=$((VC + 1))
+          NVN=$(echo "$VN" | awk -F. '{print $1"."$2"."($3+1)}')
+          echo "versionCode=$NVC" >> "$GITHUB_OUTPUT"
+          echo "versionName=$NVN" >> "$GITHUB_OUTPUT"
+          echo "Building $NVN (code $NVC) from current $VN (code $VC)"
+
       # 未签名构建：CI 无 keystore，signingConfig 回退到 debug 签名（见 app/build.gradle.kts）
       - name: Build release (unsigned)
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease --no-daemon -PversionCode=${{ steps.next-version.outputs.versionCode }} -PversionName=${{ steps.next-version.outputs.versionName }}
 
       - name: Collect APKs + ABI check + mapping
         run: |
@@ -121,3 +138,35 @@ jobs:
         with:
           name: obfuscation-mapping
           path: dist/mapping/*.txt
+
+  # ---- Job 3: 版本提交（构建成功后执行；PR 不提交）----
+  # GITHUB_TOKEN 推送不会触发新 workflow，不会造成版本自增循环。
+  bump-version:
+    name: Bump version
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Commit bumped version
+        run: |
+          set -euo pipefail
+          VC=$(grep -oP '^versionCode=\K\d+' version.properties | head -1)
+          VN=$(grep -oP '^versionName=\K.*' version.properties | head -1)
+          NVC=$((VC + 1))
+          NVN=$(echo "$VN" | awk -F. '{print $1"."$2"."($3+1)}')
+          sed -i "s/^versionCode=.*/versionCode=$NVC/" version.properties
+          sed -i "s/^versionName=.*/versionName=$NVN/" version.properties
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.properties
+          git commit -m "chore: bump version to $NVN (code $NVC) [skip ci]" || { echo "nothing to commit"; exit 0; }
+          git push
+          echo "Bumped to $NVN (code $NVC)"

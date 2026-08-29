@@ -9,7 +9,7 @@ on:
         default: false
   push:
     tags:
-      - 'v*'          # tag 触发正式发布
+      - 'v*'          # tag 触发正式发布（大版本）
 
 permissions:
   contents: write     # 发布 Job 需要写 Release
@@ -22,11 +22,14 @@ jobs:
   build_signed:
     name: Build signed APK
     runs-on: ubuntu-latest
+    outputs:
+      versionName: ${{ steps.version.outputs.versionName }}
+      versionCode: ${{ steps.version.outputs.versionCode }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0    # 供 update.json 用 git 版本信息
+          fetch-depth: 0    # 供 update.json 用 git 版本信息 + changelog
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -37,6 +40,26 @@ jobs:
 
       - name: Grant execute permission
         run: chmod +x gradlew
+
+      # ---- 版本解析：tag（v1.8.0 → versionName 1.8.0 / code 10800）或 version.properties ----
+      - name: Resolve version
+        id: version
+        run: |
+          set -euo pipefail
+          REF="${{ github.ref_name }}"
+          if [[ "$REF" == v* ]]; then
+            VN="${REF#v}"
+            MAJOR=$(echo "$VN" | cut -d. -f1)
+            MINOR=$(echo "$VN" | cut -d. -f2)
+            PATCH=$(echo "$VN" | cut -d. -f3)
+            VC=$((MAJOR*10000 + MINOR*100 + PATCH))
+          else
+            VN=$(grep -oP '^versionName=\K.*' version.properties | head -1)
+            VC=$(grep -oP '^versionCode=\K\d+' version.properties | head -1)
+          fi
+          echo "versionName=$VN" >> "$GITHUB_OUTPUT"
+          echo "versionCode=$VC" >> "$GITHUB_OUTPUT"
+          echo "Release version: $VN (code $VC)"
 
       # ---- 签名：keystore 解码到 RUNNER_TEMP 隔离，密钥走环境变量 ----
       - name: Decode keystore (RUNNER_TEMP isolated)
@@ -52,7 +75,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease --no-daemon -PversionCode=${{ steps.version.outputs.versionCode }} -PversionName=${{ steps.version.outputs.versionName }}
 
       - name: Collect APKs + ABI check + mapping
         run: |
@@ -121,12 +144,12 @@ jobs:
           path: artifacts/mapping
         continue-on-error: true
 
-      # ---- 生成 update.json（供应用内更新器；包名 cn.nizou.sxd / 应用名 老挂戏老叟）----
+      # ---- 生成 update.json（供应用内更新器；版本用构建时解析值）----
       - name: Generate update.json
         run: |
           GIT_HASH=$(git rev-parse --short HEAD)
-          VERSION_NAME=$(grep -o 'versionName[[:space:]]*=[[:space:]]*"[^"]*"' app/build.gradle.kts | head -1 | sed -E 's/.*"([^"]*)"/\1/')
-          VERSION_CODE=$(grep -o 'versionCode[[:space:]]*=[[:space:]]*[0-9]*' app/build.gradle.kts | head -1 | grep -o '[0-9]*')
+          VERSION_NAME="${{ needs.build_signed.outputs.versionName }}"
+          VERSION_CODE="${{ needs.build_signed.outputs.versionCode }}"
 
           cat > artifacts/update.json <<EOF
           {
@@ -150,7 +173,19 @@ jobs:
           cp -v artifacts/mapping/*.txt assets/ 2>/dev/null || true
           echo "Assets:"; ls -1 assets
 
-      # ---- tag 触发 → 正式 Release；手动 → 滚动 CI Release ----
+      # ---- changelog：上次 release（tag）之后的提交（剔除版本自增提交）----
+      - name: Generate changelog (since last release)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          PREV=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
+          if [ -n "$PREV" ]; then
+            git log --oneline --no-merges --grep="bump version" --invert-grep "$PREV..HEAD" > changelog.md
+          else
+            git log --oneline --no-merges --grep="bump version" --invert-grep > changelog.md
+          fi
+          echo "=== Changelog ==="; cat changelog.md
+
+      # ---- tag 触发 → 正式 Release（大版本，notes=上次 release 之后的改动）；手动 → 滚动 CI Release ----
       - name: Publish (tag release)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
@@ -158,7 +193,7 @@ jobs:
           name: 老挂戏老叟 ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
           files: assets/*
-          generate_release_notes: true
+          body_path: changelog.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

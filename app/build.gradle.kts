@@ -12,6 +12,13 @@ fun gitShortHash(): String = providers.exec {
     commandLine("git", "rev-parse", "--short=8", "HEAD")
 }.standardOutput.asText.get().trim()
 
+// 版本状态文件（仓库根 version.properties）：CI 每次成功构建后 +1 提交回 main。
+// 构建时可用 -PversionCode=.. -PversionName=.. 覆盖（ci.yml 自增 / release.yml tag 版本）。
+val versionProps = java.util.Properties().apply {
+    val f = file("version.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 android {
     namespace = "cn.nizou.sxd"
     compileSdk = 37
@@ -32,8 +39,8 @@ android {
         applicationId = "cn.nizou.sxd"
         minSdk = 33
         targetSdk = 37
-        versionCode = 20
-        versionName = "1.7.3"
+        versionCode = (project.findProperty("versionCode") as String? ?: versionProps.getProperty("versionCode", "20")).toInt()
+        versionName = project.findProperty("versionName") as String? ?: versionProps.getProperty("versionName", "1.7.3")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
