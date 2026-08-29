@@ -184,7 +184,7 @@ fun MainPagerScreen(
                     CustomAnswerScreen(res, onBack = { navigator.pop() })
                 }
                 entry<MainRoute.CustomSettle>(swipeDismiss = NavSwipeDirection.LeftToRight) {
-                    CustomSettleScreen(onBack = { navigator.pop() })
+                    CustomSettleScreen(res, onBack = { navigator.pop() })
                 }
                 entry<MainRoute.Debug>(swipeDismiss = NavSwipeDirection.LeftToRight) {
                     DebugScreen(res, onBack = { navigator.pop() })

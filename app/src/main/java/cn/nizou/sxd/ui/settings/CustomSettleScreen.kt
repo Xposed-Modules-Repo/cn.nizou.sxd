@@ -33,9 +33,9 @@ import cn.nizou.sxd.util.StringRes
 /** 自定义结算时间：设置 QUICK 提交 costTime（毫秒，0=按模拟答题间隔算）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CustomSettleScreen(onBack: () -> Unit) {
+fun CustomSettleScreen(res: StringRes, onBack: () -> Unit) {
     var settle by remember {
-        mutableStateOf(SettingsPrefs.readString(null, "pk_settle_time", "0"))
+        mutableStateOf(SettingsPrefs.readString(res, "pk_settle_time", "0"))
     }
     M3ListScaffold(title = "自定义结算时间", navigationIcon = { M3BackButton(onClick = onBack) }) {
         item {
@@ -48,7 +48,7 @@ fun CustomSettleScreen(onBack: () -> Unit) {
                     filter = { it.filter { c -> c.isDigit() } },
                     onValueChange = {
                         settle = it
-                        SettingsPrefs.writeString(null, "pk_settle_time", it)
+                        SettingsPrefs.writeString(res, "pk_settle_time", it)
                     }
                 )
                 Text(
