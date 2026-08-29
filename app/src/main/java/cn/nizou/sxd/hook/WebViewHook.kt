@@ -240,6 +240,12 @@ class WebViewHook(
                 val mode = PK.mode
                 // 答题 JS 配置（mode/自定义答案/自定义正确题数），quick.js 读取；标准模式同样注入。
                 injectAaConfig(loadUrl, webView)
+                // 题目答案注入 window.aa_answers（不依赖 JS bridge addJavascriptInterface——
+                // 答题 WebView 上 window.AutoOral 可能未注册，getAnswers() 拿不到 → 直接注入变量）
+                if (AnswerCache.answers != "[]") {
+                    injectConfig(loadUrl, webView, "aa_answers", AnswerCache.answers)
+                    logI("aa_answers injected: " + AnswerCache.answers.length + " chars")
+                }
                 val jsCode = when (mode) {
                     // QUICK/STANDARD 统一用通用答题脚本（Vue2/Vue3 双适配，mode 由 __aa_config 区分）；
                     // 标准模式 3.140 前用旧 standard.js（Vue2 专属），在 Vue3 exercise.html 上已失效，废弃。

@@ -17,15 +17,18 @@ setTimeout(function () {
     }
     function fetchAnswers() {
         try {
+            // 优先：native 注入的 window.aa_answers（异步注入，可能稍后到达）
+            if (window.aa_answers && Array.isArray(window.aa_answers) && window.aa_answers.length && window.aa_answers.length >= ANSWERS.length) {
+                ANSWERS = window.aa_answers;
+                return;
+            }
+            // 次选：JS bridge getAnswers()
             if (window.AutoOral && window.AutoOral.getAnswers) {
                 var s = window.AutoOral.getAnswers();
                 if (s && s.length > 2 && s !== '[]') {
                     var a = JSON.parse(s);
                     if (Array.isArray(a) && a.length) {
-                        // 去重保护：native 缓存可能覆盖，只在确实有内容时更新
-                        var merged = ANSWERS;
-                        if (a.length >= merged.length) merged = a;
-                        ANSWERS = merged;
+                        if (a.length >= ANSWERS.length) ANSWERS = a;
                     }
                 }
             }
