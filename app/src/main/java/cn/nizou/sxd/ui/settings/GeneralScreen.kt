@@ -22,11 +22,8 @@ fun GeneralScreen(res: StringRes, onBack: () -> Unit) {
     var alwaysTrue by remember {
         mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_ALWAYS_TRUE_ANSWER, true))
     }
-    var doubleNickname by remember {
-        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_DOUBLE_NICKNAME_LENGTH, true))
-    }
-    var removeRestriction by remember {
-        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_REMOVE_RESTRICTION_ON_NICKNAME, false))
+    var ignoreNicknameRestriction by remember {
+        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_IGNORE_NICKNAME_RESTRICTION, true))
     }
 
     M3ListScaffold(
@@ -45,20 +42,12 @@ fun GeneralScreen(res: StringRes, onBack: () -> Unit) {
                     }
                 )
                 SwitchWidget(
-                    title = "双倍昵称长度",
-                    checked = doubleNickname,
+                    title = "无视名字限制",
+                    description = "昵称长度与字符/格式限制全部放开（任意长度、任意非空白字符）",
+                    checked = ignoreNicknameRestriction,
                     onCheckedChange = {
-                        doubleNickname = it
-                        SettingsPrefs.writeBoolean(res, res.KEY_DOUBLE_NICKNAME_LENGTH, it)
-                    }
-                )
-                SwitchWidget(
-                    title = "解除昵称字符限制",
-                    description = "开启后，昵称可以使用任意非空白字符",
-                    checked = removeRestriction,
-                    onCheckedChange = {
-                        removeRestriction = it
-                        SettingsPrefs.writeBoolean(res, res.KEY_REMOVE_RESTRICTION_ON_NICKNAME, it)
+                        ignoreNicknameRestriction = it
+                        SettingsPrefs.writeBoolean(res, res.KEY_IGNORE_NICKNAME_RESTRICTION, it)
                     }
                 )
             }

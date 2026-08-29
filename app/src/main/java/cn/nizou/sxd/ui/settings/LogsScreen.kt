@@ -36,8 +36,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -78,7 +76,6 @@ import androidx.compose.ui.unit.sp
 import cn.nizou.sxd.ui.components.BaseItemContainer
 import cn.nizou.sxd.ui.components.DropDownMenuWidget
 import cn.nizou.sxd.ui.components.DropdownOption
-import cn.nizou.sxd.XposedInit
 import cn.nizou.sxd.ui.components.M3BackButton
 import cn.nizou.sxd.util.StringRes
 import cn.nizou.sxd.util.WeLogger
@@ -88,7 +85,6 @@ import com.composables.icons.materialsymbols.outlined.Delete_sweep
 import com.composables.icons.materialsymbols.outlined.Expand_more
 import com.composables.icons.materialsymbols.outlined.Keyboard_double_arrow_down
 import com.composables.icons.materialsymbols.outlined.Keyboard_double_arrow_up
-import com.composables.icons.materialsymbols.outlined.More_vert
 import com.composables.icons.materialsymbols.outlined.Refresh
 import com.composables.icons.materialsymbols.outlined.Save
 import com.composables.icons.materialsymbols.outlined.Share
@@ -150,7 +146,6 @@ fun LogsScreen(
     // 每个 tab 的文件选择互相独立（两个页面同时保持组合）。
     val currentFiles = remember { mutableStateMapOf<LogKind, Path?>() }
     val currentFile = currentFiles[kind]
-    var menuExpanded by remember { mutableStateOf(false) }
 
     // ---- 保存（CreateDocument）：仅当组合环境能解析到 ComponentActivity 时可用 ----
     // 宿主注入面板跑在 ComponentDialog（非 Activity，无 ActivityResultRegistry），
@@ -208,6 +203,8 @@ fun LogsScreen(
                     ),
                     actions = {
                         // 按钮背景：图标按钮加 surfaceVariant 圆形底色，避免透明不可见（UI 修复）。
+                        // 2026-08-29：刷新/清除从溢出菜单改为显式按钮（原 DropdownMenuPopup 在
+                        // M3 1.5.0-alpha26 下菜单表面透明、按钮不可见）。
                         val actionBtnModifier = Modifier
                             .padding(4.dp)
                             .clip(RoundedCornerShape(50))
@@ -229,7 +226,7 @@ fun LogsScreen(
                             )
                         }
                         // 保存：宿主面板（ComponentDialog，无 ActivityResultRegistry）也能保存 ——
-                        // 降级为复制到模块 filesDir/log-export/ 并 Toast 完整路径（UI 修复）。
+                        // 降级为复制到当前进程 filesDir/log-export/ 并 Toast 完整路径（UI 修复）。
                         IconButton(
                             onClick = {
                                 val file = currentFile
@@ -250,47 +247,36 @@ fun LogsScreen(
                                 contentDescription = "保存",
                             )
                         }
-                        // 溢出菜单锚点（照项目 DropDownMenuWidget 的锚点写法）。
-                        Box {
-                            IconButton(onClick = { menuExpanded = true }, modifier = actionBtnModifier) {
-                                Icon(
-                                    imageVector = MaterialSymbols.Outlined.More_vert,
-                                    contentDescription = "更多",
-                                )
-                            }
-                            DropdownMenuPopup(
-                                expanded = menuExpanded,
-                                onDismissRequest = { menuExpanded = false },
-                            ) {
-                                // M3 菜单默认带 surface 背景；顶部操作按钮背景见 actions（已加 surfaceVariant 圆底）
-                                DropdownMenuItem(
-                                    text = { Text("刷新") },
-                                    leadingIcon = { Icon(MaterialSymbols.Outlined.Refresh, null) },
-                                    onClick = {
-                                        menuExpanded = false
-                                        requestRefresh(kind, fromPull = false)
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("清除") },
-                                    leadingIcon = { Icon(MaterialSymbols.Outlined.Delete_sweep, null) },
-                                    onClick = {
-                                        menuExpanded = false
-                                        scope.launch {
-                                            withContext(Dispatchers.IO) {
-                                                when (kind) {
-                                                    LogKind.RUN -> WeLogger.allLogFiles.forEach {
-                                                        runCatching { it.toFile().delete() }
-                                                    }
-
-                                                    LogKind.CRASH -> CrashLogsManager.deleteAllCrashLogs()
-                                                }
+                        IconButton(
+                            onClick = { requestRefresh(kind, fromPull = false) },
+                            modifier = actionBtnModifier,
+                        ) {
+                            Icon(
+                                imageVector = MaterialSymbols.Outlined.Refresh,
+                                contentDescription = "刷新",
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                scope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        when (kind) {
+                                            LogKind.RUN -> WeLogger.allLogFiles.forEach {
+                                                runCatching { it.toFile().delete() }
                                             }
-                                            requestRefresh(kind, fromPull = false)
+
+                                            LogKind.CRASH -> CrashLogsManager.deleteAllCrashLogs()
                                         }
-                                    },
-                                )
-                            }
+                                    }
+                                    requestRefresh(kind, fromPull = false)
+                                }
+                            },
+                            modifier = actionBtnModifier,
+                        ) {
+                            Icon(
+                                imageVector = MaterialSymbols.Outlined.Delete_sweep,
+                                contentDescription = "清除",
+                            )
                         }
                     },
                 )
@@ -526,25 +512,30 @@ private suspend fun shareLogFile(context: Context, file: Path) {
         putExtra(Intent.EXTRA_TEXT, text)
     }
     val chooser = Intent.createChooser(sendIntent, "分享日志").apply {
-        // 宿主注入环境 context 不是 Activity，必须 NEW_TASK。
+        // 宿主注入环境 context 不是 Activity，必须 NEW_TASK；用 applicationContext 最稳。
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
-    runCatching { context.startActivity(chooser) }
-        .onFailure { WeLogger.e(LOGS_TAG, "failed to launch share chooser", it) }
+    runCatching { context.applicationContext.startActivity(chooser) }
+        .onFailure {
+            WeLogger.e(LOGS_TAG, "failed to launch share chooser", it)
+            Toast.makeText(context, "分享失败：${it.message}", Toast.LENGTH_SHORT).show()
+        }
 }
 
 /**
  * 宿主面板（ComponentDialog，无 ActivityResultRegistry）下的「保存日志」降级方案：
- * 把当前日志文件复制到模块自身 dataDir/files/log-export/（宿主进程可读写模块私有目录），
- * 并 Toast 完整路径。独立模块场景仍优先走系统 CreateDocument 选择器（saveLauncher）。
+ * 把当前日志文件复制到**当前进程可写**目录 `filesDir/log-export/`，并 Toast 完整路径。
+ * 独立模块场景仍优先走系统 CreateDocument 选择器（saveLauncher）。
+ *
+ * 2026-08-29 修复：旧实现写 `XposedInit.self.moduleApplicationInfo.dataDir`（模块私有目录）——
+ * 宿主注入面板运行在宿主进程（UID=com.fenbi.android.leo），跨 UID 写模块 dataDir 必抛
+ * SecurityException → 一直「保存日志失败」。改写 `context.filesDir`（宿主面板=宿主 Context，
+ * 独立模块=模块 Context），两种场景都可写。
  */
 private suspend fun saveLogToModuleDir(context: Context, file: Path) {
     val savedPath = withContext(Dispatchers.IO) {
         runCatching {
-            val exportDir = File(
-                XposedInit.self.moduleApplicationInfo.dataDir,
-                "files/log-export"
-            ).apply { mkdirs() }
+            val exportDir = File(context.filesDir, "log-export").apply { mkdirs() }
             val target = File(exportDir, file.name)
             File(file.toString()).inputStream().use { input ->
                 target.outputStream().use { output -> input.copyTo(output) }

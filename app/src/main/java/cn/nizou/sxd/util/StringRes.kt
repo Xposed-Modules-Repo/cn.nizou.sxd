@@ -7,8 +7,8 @@ import cn.nizou.sxd.XposedInit
 
 class StringRes(private val resources: Resources) {
     val KEY_ALWAYS_TRUE_ANSWER = resString(R.string.key_always_true_answer)
-    val KEY_DOUBLE_NICKNAME_LENGTH = resString(R.string.key_double_nickname_length)
-    val KEY_REMOVE_RESTRICTION_ON_NICKNAME = resString(R.string.key_remove_restriction_on_nickname)
+    // 2026-08-29 合并：原「双倍昵称长度」+「解除昵称字符限制」合并为单一「无视名字限制」开关
+    val KEY_IGNORE_NICKNAME_RESTRICTION = resString(R.string.key_remove_restriction_on_nickname)
     val KEY_AUTO_HONOR = resString(R.string.key_auto_honor)
     val KEY_AUTO_PRACTICE = resString(R.string.key_auto_practice)
     val KEY_AUTO_PRACTICE_QUICK = resString(R.string.key_auto_practice_quick)

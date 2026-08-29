@@ -44,8 +44,10 @@ object SettingsPrefs {
 
 object Common {
     val alwaysTrue get() = modulePrefs.getBoolean(moduleStringRes.KEY_ALWAYS_TRUE_ANSWER, true)
-    val doubleNicknameLength get() = modulePrefs.getBoolean(moduleStringRes.KEY_DOUBLE_NICKNAME_LENGTH, true)
-    val removeRestrictionOnNickname get() = modulePrefs.getBoolean(moduleStringRes.KEY_REMOVE_RESTRICTION_ON_NICKNAME, false)
+    // 2026-08-29 合并：单一「无视名字限制」开关（原「双倍昵称长度」+「解除昵称字符限制」合并），
+    // 默认开：昵称长度（GBK 字节 ≤16）与字符/格式限制全部放开。
+    val ignoreNicknameRestriction
+        get() = modulePrefs.getBoolean(moduleStringRes.KEY_IGNORE_NICKNAME_RESTRICTION, true)
 }
 
 object Practice {

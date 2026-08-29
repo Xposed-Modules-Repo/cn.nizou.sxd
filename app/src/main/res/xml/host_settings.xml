@@ -8,13 +8,9 @@
             android:title="一切输入视为正确答案" />
         <SwitchPreference
             android:defaultValue="true"
-            android:key="@string/key_double_nickname_length"
-            android:title="双倍昵称长度" />
-        <SwitchPreference
-            android:defaultValue="false"
-            android:title="解除昵称字符限制"
             android:key="@string/key_remove_restriction_on_nickname"
-            android:summary="开启后，昵称可以使用任意非空白字符" />
+            android:summary="昵称长度与字符/格式限制全部放开（任意长度、任意非空白字符）"
+            android:title="无视名字限制" />
     </PreferenceCategory>
     <PreferenceCategory android:title="练习">
         <SwitchPreference
