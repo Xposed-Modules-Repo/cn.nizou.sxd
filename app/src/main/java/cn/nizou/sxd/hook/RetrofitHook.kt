@@ -38,32 +38,53 @@ class RetrofitHook(
     private fun addInterceptor(retrofit: Any) {
         if (!patchedRetrofits.add(retrofit)) return
         logI("addInterceptor")
-        // 2026-08-29：3.140 字段结构漂移——retrofit.callFactory 的 OkHttpClient 上「interceptors」
-        // 字段可能不存在/改名（真机 logcat 抛 NoSuchFieldException: interceptors）。用 runCatching
-        // 容错：失败则放弃该实例（不崩、不影响其它 Retrofit），并尝试 OkHttpClient.getInterceptors()
-        // 方法兜底。用户信息采集依赖拦截器挂成功，故尽可能多路径。
+        // 2026-08-29（真机定案）：retrofit.callFactory **不是** okhttp3.OkHttpClient，而是 leo-network 的
+        // Call.Factory 装饰器（3.140 上为包 aq 的类 g，其字段 a 持有真正的 OkHttpClient）。直接在装饰器上读
+        // 「interceptors」字段/方法全部失败（真机 logcat：interceptors(0 args) in class aq.g），此前 3 路径
+        // 兜底并不生效。正确做法：沿 Call.Factory 装饰器链向下解包到真正的 okhttp3.OkHttpClient
+        // （okhttp3 在本宿主**未混淆**，类名/字段名保持原名），把本模块拦截器注入其 interceptors 字段。
+        // 该字段是 final List，用 setObjectField 整体替换成新列表（与旧方案一致）。失败容错跳不崩。
         runCatching {
-            val callFactory = XposedHelpers.getObjectField(retrofit, "callFactory")
+            val clientClass = findClass("okhttp3.OkHttpClient")
+            val realClient = unwrapToOkHttpClient(
+                XposedHelpers.getObjectField(retrofit, "callFactory"), clientClass
+            )
+            if (realClient == null) {
+                logI("addInterceptor skipped (no OkHttpClient in callFactory chain)")
+                return@runCatching
+            }
             val interceptorClass = findClass(Classname.INTERCEPTOR)
             val myInterceptor =
                 Proxy.newProxyInstance(interceptorClass.classLoader, arrayOf(interceptorClass), this)
-            // 路径1：OkHttpClient.interceptors 字段
-            // 路径2：getInterceptors() 方法
-            // 路径3：OkHttp 公开 interceptors() 方法（混淆类 aq.g 上 public API 名仍保留）
-            val interceptors: List<*> = try {
-                XposedHelpers.getObjectField(callFactory, "interceptors") as List<*>
-            } catch (_: Throwable) {
-                try {
-                    XposedHelpers.callMethod(callFactory, "getInterceptors") as List<*>
-                } catch (_: Throwable) {
-                    XposedHelpers.callMethod(callFactory, "interceptors") as List<*>
-                }
-            }
-            XposedHelpers.setObjectField(callFactory, "interceptors", (interceptors + myInterceptor).toList())
+            val interceptors = XposedHelpers.getObjectField(realClient, "interceptors") as List<*>
+            XposedHelpers.setObjectField(realClient, "interceptors", (interceptors + myInterceptor).toList())
             logI("addInterceptor OK: " + (interceptors.size + 1))
         }.onFailure {
             logI("addInterceptor skipped (field drift): " + it.message)
         }
+    }
+
+    /**
+     * 沿 Call.Factory 装饰器链（如 aq.g 包装 okhttp3.OkHttpClient）向下解包，返回真正的
+     * okhttp3.OkHttpClient；找不到返回 null。只要目标类 / Call.Factory 接口名匹配即跟随。
+     */
+    private fun unwrapToOkHttpClient(start: Any?, clientClass: Class<*>): Any? {
+        var obj = start
+        val seen = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Any, Boolean>())
+        while (obj != null && seen.add(obj)) {
+            if (clientClass.isInstance(obj)) return obj
+            var next: Any? = null
+            for (f in obj.javaClass.declaredFields) {
+                if (java.lang.reflect.Modifier.isStatic(f.modifiers)) continue
+                f.isAccessible = true
+                val v = runCatching { f.get(obj) }.getOrNull() ?: continue
+                if (clientClass.isInstance(v)) { next = v; break }
+                // 仅跟随 Call.Factory 装饰器链，避免误入无关对象
+                if (v.javaClass.interfaces.any { it.name == "okhttp3.Call\$Factory" }) { next = v; break }
+            }
+            obj = next
+        }
+        return obj
     }
 
     override fun invoke(proxy: Any?, method: Method, args: Array<out Any>?): Any? {
