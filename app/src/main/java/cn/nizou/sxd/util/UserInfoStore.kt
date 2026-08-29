@@ -52,11 +52,15 @@ object UserInfoStore {
                 }
                 return ""
             }
-            val name = pick("userName").ifBlank { pick("baseUserInfoVO", "userName") }
-                .ifBlank { pick("userInfo", "userName") }
-            val uid = pick("userId").ifBlank { pick("baseUserInfoVO", "userId") }
+            // 字段名多版本兼容：userName/nickName/name；avatarUrl/headUrl/avatar/headImg；userId/userid/id
+            val name = pick("userName").ifBlank { pick("nickName") }.ifBlank { pick("name") }
+                .ifBlank { pick("baseUserInfoVO", "userName") }.ifBlank { pick("baseUserInfoVO", "nickName") }
+                .ifBlank { pick("userInfo", "userName") }.ifBlank { pick("userInfo", "nickName") }
+            val uid = pick("userId").ifBlank { pick("userid") }.ifBlank { pick("id") }
+                .ifBlank { pick("baseUserInfoVO", "userId") }.ifBlank { pick("baseUserInfoVO", "userid") }
                 .ifBlank { pick("userInfo", "userId") }
-            val avatar = pick("avatarUrl").ifBlank { pick("baseUserInfoVO", "avatarUrl") }
+            val avatar = pick("avatarUrl").ifBlank { pick("headUrl") }.ifBlank { pick("avatar") }.ifBlank { pick("headImg") }
+                .ifBlank { pick("baseUserInfoVO", "avatarUrl") }.ifBlank { pick("baseUserInfoVO", "headUrl") }
                 .ifBlank { pick("userInfo", "avatarUrl") }
             if (name.isNotBlank() || uid.isNotBlank()) {
                 if (name.isNotBlank()) userName = name
