@@ -38,13 +38,27 @@ class RetrofitHook(
     private fun addInterceptor(retrofit: Any) {
         if (!patchedRetrofits.add(retrofit)) return
         logI("addInterceptor")
-        val interceptorClass = findClass(Classname.INTERCEPTOR)
-        // FIX: callFactory 本身即 OkHttpClient，直接读其 interceptors 字段，去掉中间 "a" 一步
-        val callFactory = XposedHelpers.getObjectField(retrofit, "callFactory")
-        val interceptors = XposedHelpers.getObjectField(callFactory, "interceptors") as List<*>
-        val myInterceptor =
-            Proxy.newProxyInstance(interceptorClass.classLoader, arrayOf(interceptorClass), this)
-        XposedHelpers.setObjectField(callFactory, "interceptors", (interceptors + myInterceptor).toList())
+        // 2026-08-29：3.140 字段结构漂移——retrofit.callFactory 的 OkHttpClient 上「interceptors」
+        // 字段可能不存在/改名（真机 logcat 抛 NoSuchFieldException: interceptors）。用 runCatching
+        // 容错：失败则放弃该实例（不崩、不影响其它 Retrofit），并尝试 OkHttpClient.getInterceptors()
+        // 方法兜底。用户信息采集依赖拦截器挂成功，故尽可能多路径。
+        runCatching {
+            val callFactory = XposedHelpers.getObjectField(retrofit, "callFactory")
+            val interceptorClass = findClass(Classname.INTERCEPTOR)
+            val myInterceptor =
+                Proxy.newProxyInstance(interceptorClass.classLoader, arrayOf(interceptorClass), this)
+            // 路径1：OkHttpClient.interceptors 字段
+            val interceptors: List<*> = try {
+                XposedHelpers.getObjectField(callFactory, "interceptors") as List<*>
+            } catch (_: Throwable) {
+                // 路径2：方法 getInterceptors()
+                XposedHelpers.callMethod(callFactory, "getInterceptors") as List<*>
+            }
+            XposedHelpers.setObjectField(callFactory, "interceptors", (interceptors + myInterceptor).toList())
+            logI("addInterceptor OK: " + (interceptors.size + 1))
+        }.onFailure {
+            logI("addInterceptor skipped (field drift): " + it.message)
+        }
     }
 
     override fun invoke(proxy: Any?, method: Method, args: Array<out Any>?): Any? {
