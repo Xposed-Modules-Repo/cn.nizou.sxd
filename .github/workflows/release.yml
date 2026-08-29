@@ -204,6 +204,9 @@ jobs:
         run: |
           gh release delete CI --yes || true
           gh api -X DELETE repos/${{ github.repository }}/git/refs/tags/CI || true
+          # 远端 tag CI 已删，本地 checkout（fetch-depth 0 拉全 tags）残留同名 tag 会让
+          # gh release create 报 "tag CI exists locally but has not been pushed"，先本地删掉。
+          git tag -d CI 2>/dev/null || true
           gh release create CI \
             --title "老挂戏老叟 CI" \
             --prerelease \
