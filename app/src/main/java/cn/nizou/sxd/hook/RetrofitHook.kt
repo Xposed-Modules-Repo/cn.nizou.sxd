@@ -4,10 +4,12 @@ import cn.nizou.sxd.Classname
 import cn.nizou.sxd.util.Packet
 import cn.nizou.sxd.util.PacketTool
 import cn.nizou.sxd.util.Practice
+import cn.nizou.sxd.util.SettingsPrefs
 import cn.nizou.sxd.util.UserInfoStore
 import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.logI
 import io.github.libxposed.api.XposedInterface
+import org.json.JSONObject
 import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
@@ -136,12 +138,44 @@ class RetrofitHook(
                     val text = XposedHelpers.callMethod(body, "string") as? String
                     UserInfoStore.updateFromJson(text)
                 }
+                // 6) 推荐知识点自动记录（真自定义分数默认值）：App 首页自动请求
+                // GET /leo-math/android/recommend/keypoint，返回第一个推荐知识点 keypointId + 每局题数
+                if (fullPath.contains("/leo-math/android/recommend/keypoint")) {
+                    val body = XposedHelpers.callMethod(response, "peekBody", 1024L * 1024L)
+                    val text = XposedHelpers.callMethod(body, "string") as? String
+                    captureRecommendKeypoint(text)
+                }
             }
         }.onFailure {
             // 用户信息采集属可选功能，失败静默，不打扰正常请求
         }
 
         return response
+    }
+
+    /**
+     * 解析推荐知识点响应 `{"results":[{"name":"8、7、6加几","keypointId":41,"questionCnt":10,...}],...}`，
+     * 取第一个 keypointId + questionCnt 写入 prefs（ScorePump 真自定义分数默认值）。
+     */
+    private fun captureRecommendKeypoint(text: String?) {
+        if (text.isNullOrBlank()) return
+        runCatching {
+            val json = JSONObject(text)
+            val results = json.optJSONArray("results") ?: return
+            if (results.length() == 0) return
+            val first = results.getJSONObject(0)
+            val kp = first.optInt("keypointId", 0)
+            val cnt = first.optInt("questionCnt", 0)
+            if (kp > 0) {
+                SettingsPrefs.writeString("custom_score_keypoint", kp.toString())
+                logI("recommend keypoint auto-recorded: id=$kp questionCnt=$cnt")
+            }
+            if (cnt > 0) {
+                SettingsPrefs.writeString("custom_score_limit", cnt.toString())
+            }
+        }.onFailure {
+            logI("captureRecommendKeypoint failed: ${it.message}")
+        }
     }
     /** 把 exams 请求 query 加 isBackground=0。 */
     private fun buildIsBackground0(request: Any): Any {

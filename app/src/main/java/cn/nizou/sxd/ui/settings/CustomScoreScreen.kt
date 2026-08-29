@@ -84,7 +84,7 @@ fun CustomScoreScreen(onBack: () -> Unit) {
         mutableStateOf(SettingsPrefs.readString("custom_score_keypoint", ""))
     }
     var limit by remember {
-        mutableStateOf(SettingsPrefs.readString("custom_score_limit", "30"))
+        mutableStateOf(SettingsPrefs.readString("custom_score_limit", "10"))
     }
     var intervalMs by remember {
         mutableStateOf(SettingsPrefs.readString("custom_score_interval", "2000"))
@@ -130,7 +130,7 @@ fun CustomScoreScreen(onBack: () -> Unit) {
         val lim = limit.toIntOrNull()?.coerceIn(1, 200) ?: 30
         val iv = intervalMs.toLongOrNull()?.coerceIn(0, 60_000) ?: 2000L
         if (kp.isEmpty()) {
-            resultMsg = "知识点 ID 为空：先进一次「口算练习」页（模块会自动记录知识点），或手动填写下方知识点 ID"
+            resultMsg = "知识点 ID 为空：打开一次 App 首页即会自动记录推荐知识点（或先进练习页），也可手动填写下方知识点 ID"
             return
         }
         if (goal <= cur) {
@@ -335,8 +335,8 @@ fun CustomScoreScreen(onBack: () -> Unit) {
                         keyPointId = it.filter { c -> c.isDigit() }
                         SettingsPrefs.writeString("custom_score_keypoint", it)
                     },
-                    label = { Text("知识点 ID（进入练习页自动记录，也可手动填）") },
-                    placeholder = { Text("留空 = 先开一局练习自动记录") },
+                    label = { Text("知识点 ID（首页自动记录，可手动改）") },
+                    placeholder = { Text("留空 = 自动使用首页推荐知识点") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -347,7 +347,7 @@ fun CustomScoreScreen(onBack: () -> Unit) {
                         limit = it.filter { c -> c.isDigit() }
                         SettingsPrefs.writeString("custom_score_limit", it)
                     },
-                    label = { Text("每局题目数（默认 30）") },
+                    label = { Text("每局题目数（默认按推荐 10 题）") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
