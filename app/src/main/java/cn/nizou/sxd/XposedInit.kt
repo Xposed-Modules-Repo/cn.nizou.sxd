@@ -71,12 +71,6 @@ class XposedInit : XposedModule() {
         if (param.packageName != HOST_PACKAGE_NAME) return
         if (!param.isFirstPackage) return
 
-        // 跨进程激活标记：hook 成功后写入 RemotePreferences，供模块设置页读取（问题 3 修复）。
-        try {
-            HookStatus.markActive(getRemotePreferences(MODULE_PREFS_NAME))
-        } catch (_: Throwable) {
-        }
-
         val appClassLoader = param.classLoader
         try {
             val appClass = XposedHelpers.findClass("android.app.Application", appClassLoader)
@@ -86,6 +80,11 @@ class XposedInit : XposedModule() {
                 val r = chain.proceed()
                 try {
                     BaseHook.startHook(this, appClassLoader)
+                    // 宿主注入成功后写入激活标记（此时 getRemotePreferences 已就绪）：
+                    // 供模块设置页/注入面板读取。写入此位置可避免 onPackageReady 早期 RemotePreferences
+                    // 未就绪导致写入被静默吞掉（真机 hook_active 缺失，卡片误显未激活）。
+                    runCatching { HookStatus.markActive(getRemotePreferences(MODULE_PREFS_NAME)) }
+                        .onFailure { Log.e("AutoOral", "markActive(remote) failed", it) }
                 } catch (e: Throwable) {
                     Log.e("AutoOral", "hook after attach failed", e)
                 }

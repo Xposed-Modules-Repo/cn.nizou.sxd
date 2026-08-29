@@ -1,5 +1,6 @@
 package cn.nizou.sxd.ui.components
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -12,6 +13,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -38,6 +41,8 @@ fun M3ListScaffold(
     title: String,
     navigationIcon: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier,
+    // 底部预留给悬浮底栏(FloatingBottomBar)的空间，避免列表滑到底部被其遮挡。
+    bottomInset: Dp = 96.dp,
     content: LazyListScope.() -> Unit
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -66,7 +71,11 @@ fun M3ListScaffold(
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = innerPadding,
+            contentPadding = PaddingValues(
+                top = innerPadding.calculateTopPadding(),
+                // 仅底部追加预留给悬浮底栏的空间，避免列表滑到底部被其遮挡。
+                bottom = innerPadding.calculateBottomPadding() + bottomInset,
+            ),
             content = content
         )
     }
