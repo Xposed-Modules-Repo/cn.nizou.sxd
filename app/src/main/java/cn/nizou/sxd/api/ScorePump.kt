@@ -1,5 +1,6 @@
 package cn.nizou.sxd.api
 
+import cn.nizou.sxd.util.SettingsPrefs
 import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.logI
 import cn.nizou.sxd.util.strokes
@@ -27,6 +28,12 @@ object ScorePump {
 
     /** 安全上限：最多刷这么多局（防止异常时死循环） */
     private const val MAX_ROUNDS = 1000
+
+    /** 知识点 ID 遍历上限：1..2^15（32768），取题失败时自动逐个尝试 */
+    private const val MAX_KEYPOINT_ID = 1 shl 15
+
+    /** 遍历时每个 ID 的取题超时（短超时快速跳过无效 ID） */
+    private const val SCAN_TIMEOUT_MS = 4000L
 
     /** 用户停止标志：cancel() 置位，当前局结束/下一局开始前退出 */
     @Volatile
@@ -59,6 +66,7 @@ object ScorePump {
     ) {
         thread {
             var rounds = 0
+            var kp = keyPointId
             stopped = false
             try {
                 val initial = fetchCurrentScore()
@@ -76,17 +84,25 @@ object ScorePump {
                         onDone(Result.failure(CancellationException("用户停止，已刷 $rounds 局")))
                         return@thread
                     }
-                    val examVO = fetchExam(keyPointId, limit)
-                        ?: run {
+                    // 用当前知识点取题；失败则自动从 1 遍历到 2^15 找有效知识点（找到即记录 prefs 并继续刷）
+                    var examVO = fetchExam(kp, limit, 15000L)
+                    if (examVO == null) {
+                        onProgress(-1, rounds) // -1 = 知识点扫描中（UI 提示）
+                        val scanned = scanValidKeypoint(limit)
+                        if (scanned == null) {
                             onDone(
                                 Result.failure(
                                     IllegalStateException(
-                                        "取题失败（知识点 ID「$keyPointId」可能无效或网络异常），已刷 $rounds 局"
+                                        "知识点 1~$MAX_KEYPOINT_ID 均无法取题（网络异常或服务端风控），已刷 $rounds 局"
                                     )
                                 )
                             )
                             return@thread
                         }
+                        kp = scanned.first
+                        examVO = scanned.second
+                        logI("ScorePump: keypoint switched to $kp, continue pumping")
+                    }
                     val examId = XposedHelpers.getObjectField(examVO, "idString").toString()
                     buildFullCorrect(examVO)
                     if (!upload(examId, examVO)) {
@@ -137,7 +153,7 @@ object ScorePump {
         XposedHelpers.callMethod(examVO, "setCostTime", totalTime)
     }
 
-    private fun fetchExam(keyPointId: String, limit: Int): Any? {
+    private fun fetchExam(keyPointId: String, limit: Int, timeoutMs: Long): Any? {
         val latch = CountDownLatch(1)
         var exam: Any? = null
         var err: Throwable? = null
@@ -145,15 +161,33 @@ object ScorePump {
             r.onSuccess { exam = it }.onFailure { err = it }
             latch.countDown()
         }
-        if (!latch.await(15, TimeUnit.SECONDS)) {
-            logI("ScorePump: getExamInfo timeout")
+        if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
+            logI("ScorePump: getExamInfo timeout (kp=$keyPointId)")
             return null
         }
         if (err != null) {
-            logI("ScorePump: getExamInfo failed: ${err.message}")
+            logI("ScorePump: getExamInfo failed (kp=$keyPointId): ${err.message}")
             return null
         }
         return exam
+    }
+
+    /**
+     * 从 1 遍历到 [MAX_KEYPOINT_ID]（2^15）找第一个能成功取题的知识点。
+     * 找到后写入 prefs `custom_score_keypoint` 供后续默认使用。返回 (知识点ID, 已取到的卷子)；
+     * 全部失败返回 null。每轮检查停止标志。
+     */
+    private fun scanValidKeypoint(limit: Int): Pair<String, Any>? {
+        for (id in 1..MAX_KEYPOINT_ID) {
+            if (stopped) return null
+            val exam = fetchExam(id.toString(), limit, SCAN_TIMEOUT_MS)
+            if (exam != null) {
+                SettingsPrefs.writeString("custom_score_keypoint", id.toString())
+                logI("ScorePump: valid keypoint found: $id")
+                return id.toString() to exam
+            }
+        }
+        return null
     }
 
     private fun upload(examId: String, examVO: Any): Boolean {

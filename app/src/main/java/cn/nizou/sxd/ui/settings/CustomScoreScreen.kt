@@ -126,19 +126,16 @@ fun CustomScoreScreen(onBack: () -> Unit) {
     fun startPump() {
         val cur = currentScore ?: return
         val goal = directTarget.toIntOrNull() ?: return
+        // 知识点可为空：ScorePump 会先按记录值取题，失败自动从 1 遍历到 2^15 找有效知识点
         val kp = keyPointId.trim()
-        val lim = limit.toIntOrNull()?.coerceIn(1, 200) ?: 30
+        val lim = limit.toIntOrNull()?.coerceIn(1, 200) ?: 10
         val iv = intervalMs.toLongOrNull()?.coerceIn(0, 60_000) ?: 2000L
-        if (kp.isEmpty()) {
-            resultMsg = "知识点 ID 为空：打开一次 App 首页即会自动记录推荐知识点（或先进练习页），也可手动填写下方知识点 ID"
-            return
-        }
         if (goal <= cur) {
             resultMsg = "目标分数必须大于当前分数（$cur）"
             return
         }
         pumping = true
-        pumpProgress = "开始：当前 $cur → 目标 $goal（知识点 $kp，每局 $lim 题）"
+        pumpProgress = "开始：当前 $cur → 目标 $goal（知识点 ${kp.ifBlank { "自动扫描 1~32768" }}，每局 $lim 题）"
         resultMsg = null
         ScorePump.pumpToTarget(
             keyPointId = kp,
@@ -147,7 +144,8 @@ fun CustomScoreScreen(onBack: () -> Unit) {
             target = goal,
             onProgress = { now, rounds ->
                 mainHandler.post {
-                    pumpProgress = "第 $rounds 局 · 当前 $now / $goal"
+                    pumpProgress = if (now < 0) "扫描知识点中（1~32768 自动尝试，可随时停止）…"
+                    else "第 $rounds 局 · 当前 $now / $goal"
                 }
             },
             onDone = { r ->
@@ -391,7 +389,8 @@ fun CustomScoreScreen(onBack: () -> Unit) {
                 }
                 Text(
                     text = "说明：循环「取卷子→全对→上传（/leo-math/android/exams/v2）」刷分，与「自动上分」同链路，" +
-                        "无登录参与接口的每天 3 次限制。每局经验由服务端按题数计算，刷到目标需若干局，期间可随时停止。",
+                        "无登录参与接口的每天 3 次限制。知识点 ID 可留空——取题失败会自动从 1 遍历到 2^15(32768) " +
+                        "找有效知识点并记录；每局经验由服务端按题数计算，可随时停止。",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall
                 )
