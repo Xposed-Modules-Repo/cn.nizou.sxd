@@ -140,7 +140,11 @@ fun UserInfoCard(modifier: Modifier = Modifier) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = if (name.isNotBlank()) name else "未采集到用户信息（点击刷新）",
+                    text = when {
+                        name.isNotBlank() -> name
+                        uid.isNotBlank() -> "已检测账号 ID:$uid（昵称待采集，打开个人中心）"
+                        else -> "未采集到用户信息（点击刷新）"
+                    },
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                 )

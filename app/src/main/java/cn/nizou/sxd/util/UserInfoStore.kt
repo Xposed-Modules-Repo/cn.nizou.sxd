@@ -66,6 +66,14 @@ object UserInfoStore {
                 .ifBlank { pick("baseUserInfoVO", "avatarUrl") }.ifBlank { pick("baseUserInfoVO", "headUrl") }
                 .ifBlank { pick("userInfo", "avatarUrl") }.ifBlank { pick("userInfo", "headUrl") }
             if (name.isNotBlank() || uid.isNotBlank()) {
+                // 2026-08-29 账号切换防混搭：若新响应带的是**不同账号**的 uid（宿主子账号多：
+                // primary 511467407 / 1066052990 / 1151466346 等，不同页面会触发不同账号的接口），
+                // 旧账号的 name/avatar 必须清掉，否则卡片出现「新 ID + 旧昵称/旧头像」的被顶掉现象。
+                val curUid = userId
+                if (uid.isNotBlank() && curUid.isNotBlank() && uid != curUid) {
+                    userName = ""
+                    avatarUrl = ""
+                }
                 if (name.isNotBlank()) userName = name
                 if (uid.isNotBlank()) userId = uid
                 if (avatar.isNotBlank()) avatarUrl = avatar
