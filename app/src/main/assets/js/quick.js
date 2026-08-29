@@ -123,6 +123,8 @@ setTimeout(function () {
             dbg('[quick] drew #' + (idx - 1) + ': ' + answer + ' (total ' + drawn + ', tries ' + tries + ')');
         }
     }
+    // 屏蔽 H5 检测弹窗（alert/confirm）——外挂行为检测概率出现时的兜底
+    try { window.alert = function () {}; window.confirm = function () { return true; }; } catch (e) {}
     dbg('[quick] js injected, mode=' + MODE + ', custom=' + CUSTOM_ANSWER);
     var timer = setInterval(tryDraw, 250);
     setTimeout(function () {

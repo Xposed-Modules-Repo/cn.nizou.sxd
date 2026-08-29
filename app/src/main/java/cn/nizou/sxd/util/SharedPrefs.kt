@@ -145,7 +145,8 @@ object Packet {
  * 均仅在开关开启时生效，且 hook 内部 runCatching，失败不影响正常流程。
  */
 object Risk {
-    val blockRisk get() = modulePrefs.getBoolean(moduleStringRes.KEY_BLOCK_RISK_DETECT, false)
+    // 2026-08-29：外挂行为检测弹窗概率出现，默认开启屏蔽（用户可关）
+    val blockRisk get() = modulePrefs.getBoolean(moduleStringRes.KEY_BLOCK_RISK_DETECT, true)
     val blockSupervision get() = modulePrefs.getBoolean(moduleStringRes.KEY_BLOCK_SUPERVISION, false)
 }
 

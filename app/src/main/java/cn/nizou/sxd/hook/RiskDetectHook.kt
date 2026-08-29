@@ -4,6 +4,7 @@ import android.app.Dialog
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import android.widget.Toast
 import cn.nizou.sxd.util.Risk
 import cn.nizou.sxd.util.logI
 import io.github.libxposed.api.XposedInterface
@@ -40,6 +41,7 @@ class RiskDetectHook(
     override fun startHook() {
         hookSupervisionHelper()
         hookRiskDialog()
+        hookRiskToast()
     }
 
     /** 家长监督视图强制隐藏：j(show) 短路返回、k() 短路返回。 */
@@ -71,6 +73,32 @@ class RiskDetectHook(
             }
         }.onFailure {
             logI("risk dialog hook skipped: ${it.message}")
+        }
+    }
+
+    /** 外挂行为检测 Toast 屏蔽：命中风险关键字即 cancel。 */
+    private fun hookRiskToast() {
+        runCatching {
+            val toastClass = findClass("android.widget.Toast")
+            toastClass.findMethod("show").intercept("risk_toast_show") { chain ->
+                val r = chain.proceed()
+                if (Risk.blockRisk) {
+                    val toast = chain.thisObject
+                    if (toast is Toast) {
+                        val tv = toast.view?.let { v ->
+                            if (v is TextView) v.text else collectText(v)
+                        }
+                        val text = tv?.toString().orEmpty()
+                        if (riskKeywords.any { text.contains(it) }) {
+                            runCatching { toast.cancel() }
+                            logI("risk toast suppressed: ${text.take(60)}")
+                        }
+                    }
+                }
+                r
+            }
+        }.onFailure {
+            logI("risk toast hook skipped: ${it.message}")
         }
     }
 
