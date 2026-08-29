@@ -48,11 +48,16 @@ class RetrofitHook(
             val myInterceptor =
                 Proxy.newProxyInstance(interceptorClass.classLoader, arrayOf(interceptorClass), this)
             // 路径1：OkHttpClient.interceptors 字段
+            // 路径2：getInterceptors() 方法
+            // 路径3：OkHttp 公开 interceptors() 方法（混淆类 aq.g 上 public API 名仍保留）
             val interceptors: List<*> = try {
                 XposedHelpers.getObjectField(callFactory, "interceptors") as List<*>
             } catch (_: Throwable) {
-                // 路径2：方法 getInterceptors()
-                XposedHelpers.callMethod(callFactory, "getInterceptors") as List<*>
+                try {
+                    XposedHelpers.callMethod(callFactory, "getInterceptors") as List<*>
+                } catch (_: Throwable) {
+                    XposedHelpers.callMethod(callFactory, "interceptors") as List<*>
+                }
             }
             XposedHelpers.setObjectField(callFactory, "interceptors", (interceptors + myInterceptor).toList())
             logI("addInterceptor OK: " + (interceptors.size + 1))

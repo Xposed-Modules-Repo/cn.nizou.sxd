@@ -83,8 +83,16 @@ class XposedInit : XposedModule() {
                     // 宿主注入成功后写入激活标记（此时 getRemotePreferences 已就绪）：
                     // 供模块设置页/注入面板读取。写入此位置可避免 onPackageReady 早期 RemotePreferences
                     // 未就绪导致写入被静默吞掉（真机 hook_active 缺失，卡片误显未激活）。
+                    // 双保险写激活标记：RemotePreferences(跨进程) + 宿主进程本地 prefs。
                     runCatching { HookStatus.markActive(getRemotePreferences(MODULE_PREFS_NAME)) }
                         .onFailure { Log.e("AutoOral", "markActive(remote) failed", it) }
+                    runCatching {
+                        // attach 是 Application 的实例方法，chain.thisObject 即宿主 Application，
+                        // 直接用它写宿主本地 prefs（宿主导入面板读同一份，可靠显示已激活）。
+                        val ctx = chain.thisObject as? android.content.Context ?: return@runCatching
+                        ctx.getSharedPreferences(MODULE_PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                            .edit().putBoolean("hook_active", true).apply()
+                    }.onFailure { Log.e("AutoOral", "markActive(local) failed", it) }
                 } catch (e: Throwable) {
                     Log.e("AutoOral", "hook after attach failed", e)
                 }

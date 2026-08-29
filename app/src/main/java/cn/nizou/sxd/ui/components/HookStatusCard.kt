@@ -41,17 +41,20 @@ fun HookStatusCard(modifier: Modifier = Modifier) {
     var activated by remember { mutableStateOf(false) }
     var checked by remember { mutableStateOf(false) }
 
-    // 读取跨进程 RemotePreferences 的真实激活标记；失败时兜底读本进程静态标记。
+    // 读取激活标记：优先宿主进程本地 prefs（宿主导入面板可读，写入可靠）；
+    // 拿不到(模块独立进程)再读 RemotePreferences；最后兜底本进程静态标记。
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        runCatching {
+        val local = runCatching {
+            cn.nizou.sxd.util.currentApplication()?.getSharedPreferences(
+                MODULE_PREFS_NAME, android.content.Context.MODE_PRIVATE
+            )?.getBoolean("hook_active", false)
+        }.getOrNull() ?: false
+        val remote = runCatching {
             val prefs = XposedInit.self.getRemotePreferences(MODULE_PREFS_NAME)
             HookStatus.isActivated(prefs)
-        }.getOrElse {
-            HookStatus.isActivated(null)
-        }.also {
-            activated = it
-            checked = true
-        }
+        }.getOrNull() ?: false
+        activated = local || remote
+        checked = true
     }
 
     val containerColor = if (activated) Color(0xFF2E7D32) else Color(0xFFC62828)
