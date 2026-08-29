@@ -100,6 +100,12 @@ object PK {
                 Integer.parseInt(modulePrefs.getString(moduleStringRes.KEY_QUICK_MODE_INTERVAL, "")!!)
             }.getOrElse { 200 }
         }
+
+    /** 自定义结算时间（毫秒）。>0 时 QUICK 提交 costTime 直接用该值（覆盖 interval 计算）；0=按 interval 计算。 */
+    val settleTime: Int
+        get() = kotlin.runCatching {
+            Integer.parseInt(modulePrefs.getString("pk_settle_time", "")!!)
+        }.getOrElse { 0 }
     val pkCyclic
         get() = mode in arrayOf(
             AutoAnswerMode.STANDARD,

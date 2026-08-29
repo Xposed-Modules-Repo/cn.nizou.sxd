@@ -41,6 +41,9 @@ fun PkScreen(res: StringRes, onBack: () -> Unit) {
     var quickModeInterval by remember {
         mutableStateOf(SettingsPrefs.readString(res, res.KEY_QUICK_MODE_INTERVAL, "200"))
     }
+    var pkSettleTime by remember {
+        mutableStateOf(SettingsPrefs.readString(res, "pk_settle_time", "0"))
+    }
     var pkCyclic by remember {
         mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_PK_CYCLIC, false))
     }
@@ -96,6 +99,18 @@ fun PkScreen(res: StringRes, onBack: () -> Unit) {
                     onValueChange = {
                         quickModeInterval = it
                         SettingsPrefs.writeString(res, res.KEY_QUICK_MODE_INTERVAL, it)
+                    }
+                )
+                TextFieldDialogWidget(
+                    title = "自定义结算时间",
+                    value = pkSettleTime,
+                    placeholder = "毫秒，0=按上方间隔计算（可填很小如10→极速结算）",
+                    enabled = mode == AutoAnswerMode.QUICK,
+                    keyboardType = KeyboardType.Number,
+                    filter = { it.filter { c -> c.isDigit() } },
+                    onValueChange = {
+                        pkSettleTime = it
+                        SettingsPrefs.writeString(res, "pk_settle_time", it)
                     }
                 )
                 SwitchWidget(
