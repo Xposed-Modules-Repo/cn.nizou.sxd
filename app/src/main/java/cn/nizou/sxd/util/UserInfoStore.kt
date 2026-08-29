@@ -52,20 +52,24 @@ object UserInfoStore {
                 }
                 return ""
             }
-            // 字段名多版本兼容：userName/nickName/name；avatarUrl/headUrl/avatar/headImg；userId/userid/id
-            val name = pick("userName").ifBlank { pick("nickName") }.ifBlank { pick("name") }
+            // 字段名多版本兼容：userName/nickName/nickname/name；avatarUrl/headUrl/avatar/headImg；userId/userid/id
+            //（2026-08-29 真机抓包：/leo-profile/android/user-infos 返回 nickname(小写n) 而非 nickName）
+            val name = pick("userName").ifBlank { pick("nickName") }.ifBlank { pick("nickname") }.ifBlank { pick("name") }
                 .ifBlank { pick("baseUserInfoVO", "userName") }.ifBlank { pick("baseUserInfoVO", "nickName") }
+                .ifBlank { pick("baseUserInfoVO", "nickname") }
                 .ifBlank { pick("userInfo", "userName") }.ifBlank { pick("userInfo", "nickName") }
+                .ifBlank { pick("userInfo", "nickname") }
             val uid = pick("userId").ifBlank { pick("userid") }.ifBlank { pick("id") }
                 .ifBlank { pick("baseUserInfoVO", "userId") }.ifBlank { pick("baseUserInfoVO", "userid") }
-                .ifBlank { pick("userInfo", "userId") }
+                .ifBlank { pick("userInfo", "userId") }.ifBlank { pick("userInfo", "id") }
             val avatar = pick("avatarUrl").ifBlank { pick("headUrl") }.ifBlank { pick("avatar") }.ifBlank { pick("headImg") }
                 .ifBlank { pick("baseUserInfoVO", "avatarUrl") }.ifBlank { pick("baseUserInfoVO", "headUrl") }
-                .ifBlank { pick("userInfo", "avatarUrl") }
+                .ifBlank { pick("userInfo", "avatarUrl") }.ifBlank { pick("userInfo", "headUrl") }
             if (name.isNotBlank() || uid.isNotBlank()) {
                 if (name.isNotBlank()) userName = name
                 if (uid.isNotBlank()) userId = uid
                 if (avatar.isNotBlank()) avatarUrl = avatar
+                logI("UserInfoStore updateFromJson: uid=$uid name=$name avatar=$avatar")
             }
         }
     }
