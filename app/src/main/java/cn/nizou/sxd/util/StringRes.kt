@@ -36,8 +36,6 @@ class StringRes(private val resources: Resources) {
     val KEY_PACKET_REWRITE = resString(R.string.key_packet_rewrite)
     val KEY_PACKET_WRITE_FILE = resString(R.string.key_packet_write_file)
     val KEY_REWRITE_RULES = resString(R.string.key_rewrite_rules)
-    val KEY_BLOCK_RISK_DETECT = resString(R.string.key_block_risk_detect)
-    val KEY_BLOCK_SUPERVISION = resString(R.string.key_block_supervision)
 
     /** 容错读字符串：模块资源不可用（回退到系统资源）时返回资源名，避免崩溃。 */
     private fun resString(id: Int): String =

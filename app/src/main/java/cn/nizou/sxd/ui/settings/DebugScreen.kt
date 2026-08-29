@@ -44,12 +44,6 @@ fun DebugScreen(res: StringRes, onBack: () -> Unit) {
     var rewriteRules by remember {
         mutableStateOf(SettingsPrefs.readString(res, res.KEY_REWRITE_RULES, "[]"))
     }
-    var blockRisk by remember {
-        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_BLOCK_RISK_DETECT, false))
-    }
-    var blockSupervision by remember {
-        mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_BLOCK_SUPERVISION, false))
-    }
 
     M3ListScaffold(
         title = "Debug",
@@ -125,28 +119,6 @@ fun DebugScreen(res: StringRes, onBack: () -> Unit) {
                     onValueChange = {
                         rewriteRules = it
                         SettingsPrefs.writeString(res, res.KEY_REWRITE_RULES, it)
-                    }
-                )
-            }
-        }
-        item {
-            SegmentedColumn(title = "风险屏蔽") {
-                SwitchWidget(
-                    title = "屏蔽外挂/大朋友检测弹窗",
-                    description = "开启后按内容关键字自动关闭外挂/风控/家长监督弹窗",
-                    checked = blockRisk,
-                    onCheckedChange = {
-                        blockRisk = it
-                        SettingsPrefs.writeBoolean(res, res.KEY_BLOCK_RISK_DETECT, it)
-                    }
-                )
-                SwitchWidget(
-                    title = "隐藏家长监督视图",
-                    description = "强制隐藏宿主 SupervisionHelper 家长监督指示",
-                    checked = blockSupervision,
-                    onCheckedChange = {
-                        blockSupervision = it
-                        SettingsPrefs.writeBoolean(res, res.KEY_BLOCK_SUPERVISION, it)
                     }
                 )
             }

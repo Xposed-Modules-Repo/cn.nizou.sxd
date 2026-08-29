@@ -145,18 +145,6 @@ object Packet {
 }
 
 /**
- * 屏蔽「外挂检测 / 大朋友（家长监督）检测」开关（默认关）。
- * - [blockRisk]：开启后屏蔽命中外挂/风控/异常关键字弹窗（Dialog）与 H5 alert，见 hook/RiskDetectHook.kt。
- * - [blockSupervision]：开启后强制隐藏家长监督视图（com.fenbi.android.leo.imgsearch.sdk.check.helper.SupervisionHelper）。
- * 均仅在开关开启时生效，且 hook 内部 runCatching，失败不影响正常流程。
- */
-object Risk {
-    // 2026-08-29：外挂行为检测弹窗概率出现，默认开启屏蔽（用户可关）
-    val blockRisk get() = modulePrefs.getBoolean(moduleStringRes.KEY_BLOCK_RISK_DETECT, true)
-    val blockSupervision get() = modulePrefs.getBoolean(moduleStringRes.KEY_BLOCK_SUPERVISION, false)
-}
-
-/**
  * Simian 改题目/改答案/口算答案/VIP。UI 开关由 ui-copier 用 SettingsPrefs 写入同一批键。
  */
 object Simian {

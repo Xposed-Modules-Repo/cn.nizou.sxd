@@ -32,7 +32,4 @@
     <string name="key_packet_rewrite">packet_rewrite</string>
     <string name="key_packet_write_file">packet_write_file</string>
     <string name="key_rewrite_rules">rewrite_rules</string>
-    <!-- 屏蔽外挂/大朋友检测 -->
-    <string name="key_block_risk_detect">block_risk_detect</string>
-    <string name="key_block_supervision">block_supervision</string>
 </resources>
