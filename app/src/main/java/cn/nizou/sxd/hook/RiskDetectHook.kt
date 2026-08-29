@@ -32,8 +32,12 @@ class RiskDetectHook(
     override val name: String
         get() = "RiskDetectHook"
 
+    // 2026-08-29：收紧关键词——只匹配**明确针对第三方外挂/作弊**的提示，避免误杀
+    // 「退出登录/切换账号」等含"检测"/"风险"/"异常"通用词的确认弹窗（真机反馈：用模块后
+    // 无法退出/切换账号，即 RiskDetectHook 把账号确认框/popup 给 dismiss 了）。
     private val riskKeywords = arrayOf(
-        "外挂", "检测", "风控", "异常", "作弊", "家长", "大朋友", "监管", "风险", "违规", "封号"
+        "外挂", "作弊", "开挂", "第三方", "非法", "模拟器", "脚本", "辅助工具",
+        "封禁", "封号", "封停", "违规操作", "异常操作", "请勿使用", "禁止使用", "检测到作弊"
     )
 
     private var supervisionHandle: HookHandle? = null
