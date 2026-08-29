@@ -1,6 +1,25 @@
+<div align="center">
+
 # 老挂戏老叟
 
-一款为小猿口算（`com.fenbi.android.leo`）量身定制的 Xposed 模块（libxposed API 102）。
+**小猿口算（`com.fenbi.android.leo`）LSPosed 增强模块 · libxposed Modern API 102**
+
+[![Build APK](https://github.com/sxd91/cn.nizou.sxd/actions/workflows/ci.yml/badge.svg)](https://github.com/sxd91/cn.nizou.sxd/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/sxd91/cn.nizou.sxd?include_prereleases&label=release)](https://github.com/sxd91/cn.nizou.sxd/releases)
+[![Downloads](https://img.shields.io/github/downloads/sxd91/cn.nizou.sxd/total?label=downloads)](https://github.com/sxd91/cn.nizou.sxd/releases)
+![Android 16](https://img.shields.io/badge/Android-16-3DDC84?logo=android&logoColor=white)
+![LSPosed API 102](https://img.shields.io/badge/LSPosed-API%20102-blue)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+</div>
+
+## 介绍
+
+**老挂戏老叟** 是一款为 **小猿口算**（猿辅导旗下口算练习 App，包名 `com.fenbi.android.leo`）量身定制的 **LSPosed / Xposed 增强模块**，基于 libxposed Modern API 102 开发，灵感来自 [AutoOralCalculation](https://github.com/TinyHai/AutoOralCalculation)。
+
+模块为小猿口算提供**口算自动答题、秒结算、循环 PK、自定义结算时间、用户信息采集**等增强能力，UI 对齐 [WeKit](https://github.com/Ujhhgtg/WeKit)（注入宿主全屏面板 + 悬浮胶囊底栏 + 动态配色）。
+
+> 支持在小猿口算 App 内通过注入面板直接配置，也可独立打开模块本体设置。
 
 ## 功能
 
@@ -19,28 +38,70 @@
 - 口算 PK 循环 PK
 - 自定义答题脚本功能（有前端开发经验应该可以自己定义答题逻辑）
 
-## 界面（对齐 WeKit）
+### 其它
+- 自定义结算时间（毫秒）
+- 自定义分数 / 改答案 / 改题目数量
+- 用户信息采集（多子账号卡片：昵称 / 头像 / ID / Cookie）
+- 无视名字限制（昵称长度与字符/格式限制全部放开）
+- 实时日志悬浮窗 / 运行与崩溃日志查看、分享、保存
+- 抓包 / 改包（okhttp 拦截器）
 
-- 注入宿主面板：全屏 4 tab（首页 / 功能 / 日志 / 设置）+ 悬浮胶囊底栏（LiquidGlass，MaterialSymbols 图标）
-- 模块本体（独立 APK）：启动器页（激活卡片 / 打开宿主 / 打开模块设置 / GitHub）
-- 动态配色（material-kolor）：9 种调色板样式 + 色彩规范 2021/2025 + 主题模式 + 动态壁纸取色 + 自定义种子色
-- 预测返回动画 + 页面转场动画（AOSP / Miuix），返回逻辑优化
+## 下载
 
-## 借鉴仓库
+前往 [Releases](https://github.com/sxd91/cn.nizou.sxd/releases) 获取最新构建。
 
-本项目的 UI、注入架构与部分功能参考 / 移植自以下开源项目：
+## 当前支持
 
-| 仓库 | 借鉴内容 |
-|------|---------|
-| [Ujhhgtg/WeKit](https://github.com/Ujhhgtg/WeKit) | 完整 UI 体系：注入面板（全屏 4 tab pager + 悬浮胶囊底栏 LiquidGlass + M3ListScaffold + SegmentedColumn）、模块本体启动器页、MaterialSymbols 图标、动态配色（material-kolor 9 调色板 + 色彩规范 2021/2025 + 主题模式 + 动态壁纸取色 + 种子色）、预测返回动画 + 页面转场动画（miuix NavDisplay / AospNavTransition）、返回逻辑、设置页（UI 引擎 / 主题模式 / 预见性返回动画 / 页面过渡动画 / 调色板样式 / 颜色规格） |
-| [TinyHai/AutoOralCalculation](https://github.com/TinyHai/AutoOralCalculation) | 本项目前身（原 cn.tinyhai.auto_oral_calculation）：口算自动答题 / 极速模式 / 循环练习 / 刷分 / 自定义答题脚本的 hook 逻辑基础 |
-| [z2010643575/Simian](https://github.com/z2010643575/Simian) | Simian 改题目 / 改题目数量 / 口算答案 / 解锁 VIP 的 hook 点（EncryptResult / JsBridgeBean / QuestionVO / UserVipVO） |
-| [ExElectron/Xiaoyuan_Kousuan_2026](https://github.com/ExElectron/Xiaoyuan_Kousuan_2026) | PK 秒结算（秒答题）：MITM 7 大 patch 的运行时注入移植（CSS 动画 0s / 音效静音 / 自动画线 / 跳题 0ms / 判题恒真 / 跳过识别等待） |
+| 项目 | 支持范围 |
+| --- | --- |
+| 宿主 App | 小猿口算 `com.fenbi.android.leo` |
+| 已测试版本 | `3.140.1`（versionCode 31400199） |
+| Android | Android 16 / API 36 |
+| 架构 | arm64-v8a / armeabi-v7a / x86 / x86_64（universal） |
+| LSPosed | Modern API 102（npatch / Zygisk 均可） |
+| 作用域 | `com.fenbi.android.leo` |
+| Root | 需要（LSPosed 环境） |
 
-## 构建
+> 宿主升级后部分 Hook 点可能漂移（混淆类名 / 接口变化），模块已对常见漂移做容错，个别功能可能需要新版本适配。
 
-```bash
-./gradlew assembleRelease   # 签名版（需 GitHub secrets：KEYSTORE_BASE64/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD）
-```
+## 安装与使用
 
-CI（GitHub Actions）：`ci.yml`（lint+test+unsigned build）、`release.yml`（签名发布）、`codeql.yml`。
+1. 安装 APK。
+2. 在 LSPosed 中启用 **老挂戏老叟**，作用域选择 **小猿口算（`com.fenbi.android.leo`）**。
+3. 重启小猿口算（建议 force-stop 后冷启动），模块自动注入。
+4. 打开模块本体 App，或在小猿口算内通过注入面板（入口见宿主设置 / 悬浮入口）配置功能。
+
+## 排查
+
+**模块未注入 / 激活卡显示未激活**
+确认 LSPosed 已启用模块且作用域包含 `com.fenbi.android.leo`；若 `adb install -r` 覆盖安装过，请重新检查模块开关（安装可能将其重置为关闭），然后冷启动小猿口算。模块注入成功会在 logcat 出现 `(com.fenbi.android.leo)[cn.nizou.sxd,...]` 前缀日志。
+
+**秒结算 / 自动答题不生效**
+确认小猿口算已登录并进入对应口算练习 / PK 页面；模块的秒结算依赖前端页面加载（`leo-web-oral-pk` / `animation-oral.html`），进局后再观察实时日志。
+
+**用户信息卡片为空**
+打开一次小猿口算「个人中心」触发用户接口后，卡片会在数秒内自动补全；模块页可点击卡片或刷新图标手动刷新。
+
+**功能没有生效**
+进入模块的「日志」页查看运行日志，或抓取 logcat 中 `AutoOral` 标签的日志一并排查；提交反馈时请附上小猿口算版本号和日志。
+
+## 技术说明
+
+模块基于 libxposed Modern API 102，注入小猿口算主进程：`Application.attach` 后加载各 Hook（练习 / 识别 / WebView / 设置 / Retrofit 拦截 / 昵称 / Simian），秒结算通过运行时注入前端 JS（`assets/js/quick.js` / `fastsettle.js` / `cyclic.js`），用户信息与抓包通过 okhttp 拦截器捕获。构建由 GitHub Actions 自动完成（每次成功构建自动递增版本号）。
+
+## 许可
+
+本项目采用 [MIT License](LICENSE)。
+
+---
+
+本项目与猿辅导 / 小猿口算官方**无关**，仅用于学习交流。
+
+## 鸣谢
+
+- [TinyHai/AutoOralCalculation](https://github.com/TinyHai/AutoOralCalculation) —— 本项目前身（原 `cn.tinyhai.auto_oral_calculation`）：口算自动答题 / 极速模式 / 循环练习 / 刷分 / 自定义答题脚本的 hook 逻辑基础
+- [Ujhhgtg/WeKit](https://github.com/Ujhhgtg/WeKit) —— 完整 UI 体系（注入面板 / 悬浮胶囊底栏 / 日志体系 / 动态配色 / 转场动画）
+- [z2010643575/Simian](https://github.com/z2010643575/Simian) —— Simian 改题目 / 改题目数量 / 口算答案 / 解锁 VIP 的 hook 点
+- [ExElectron/Xiaoyuan_Kousuan_2026](https://github.com/ExElectron/Xiaoyuan_Kousuan_2026) —— PK 秒结算 7 大 patch 的运行时注入移植
+- [libxposed](https://github.com/libxposed/api) / [LSPosed](https://github.com/LSPosed/LSPosed) —— Xposed 框架
+- [Miuix](https://github.com/compose-miuix-ui/miuix) —— LiquidGlass 悬浮底栏 / 导航
