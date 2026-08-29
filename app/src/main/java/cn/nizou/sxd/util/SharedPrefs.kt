@@ -101,11 +101,11 @@ object PK {
             }.getOrElse { 200 }
         }
 
-    /** 自定义结算时间（毫秒）。>0 时 QUICK 提交 costTime 直接用该值（覆盖 interval 计算）；0=按 interval 计算。 */
+    /** 自定义结算时间（输入为**秒**，可带小数，如 2.5）。>0 时 QUICK 提交 costTime 直接用该值（毫秒）；0=按 interval 计算。 */
     val settleTime: Int
-        get() = kotlin.runCatching {
-            Integer.parseInt(modulePrefs.getString("pk_settle_time", "")!!)
-        }.getOrElse { 0 }
+        get() = (runCatching {
+            modulePrefs.getString("pk_settle_time", "")!!.toDouble()
+        }.getOrDefault(0.0) * 1000).toInt()
     val pkCyclic
         get() = mode in arrayOf(
             AutoAnswerMode.STANDARD,

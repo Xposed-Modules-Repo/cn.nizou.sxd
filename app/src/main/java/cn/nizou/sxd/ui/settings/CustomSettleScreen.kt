@@ -41,18 +41,18 @@ fun CustomSettleScreen(res: StringRes, onBack: () -> Unit) {
         item {
             SegmentedColumn(title = "结算时间") {
                 TextFieldDialogWidget(
-                    title = "结算用时 (ms)",
+                    title = "结算用时 (秒)",
                     value = settle,
-                    placeholder = "毫秒，0=默认（按模拟答题间隔），可填很小如10→极速结算",
-                    keyboardType = KeyboardType.Number,
-                    filter = { it.filter { c -> c.isDigit() } },
+                    placeholder = "秒，可带小数，如 2.5；0=默认（按模拟答题间隔）",
+                    keyboardType = KeyboardType.Decimal,
+                    filter = { it.filter { c -> c.isDigit() || c == '.' } },
                     onValueChange = {
                         settle = it
                         SettingsPrefs.writeString(res, "pk_settle_time", it)
                     }
                 )
                 Text(
-                    text = "说明：秒结算(QUICK)模式下，提交包的 costTime 直接使用该值。\n填 0 则按「模拟答题间隔 × 题目数」计算。\n极速值（如 10ms）需配合已开启的秒结算使用。",
+                    text = "说明：秒结算(QUICK)模式下，提交包的 costTime 直接使用该值（秒转毫秒）。\n填 0 则按「模拟答题间隔 × 题目数」计算。\n极速值（如 0.1 秒）需配合已开启的秒结算使用。",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
