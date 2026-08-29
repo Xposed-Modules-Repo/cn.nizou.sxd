@@ -42,7 +42,7 @@ setTimeout(function () {
             var el = els[i];
             var t = (el.textContent || '').trim();
             if (!t || t.length > 12) continue;
-            if (/^(继续PK|再战|再来|再玩|下一局|继续|重新开始|ok)/.test(t) || /再来|再战|继续PK|下一局|再来一局|重新开始/i.test(t)) {
+            if (/^(继续\s*PK|再战|再来|再玩|下一局|继续|重新开始|ok)/.test(t) || /再来|再战|继续\s*PK|下一局|再来一局|重新开始/i.test(t)) {
                 try { el.click(); return true; } catch (e) { try { el.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true; } catch (e2) {} }
             }
         }
