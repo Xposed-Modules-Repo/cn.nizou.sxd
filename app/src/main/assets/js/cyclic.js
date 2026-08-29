@@ -35,21 +35,32 @@ setTimeout(function () {
         return done;
     }
     function strategyButton() {
-        var els = document.querySelectorAll('button,[role=button],[class*=btn],[class*=again],[class*=retry],[class*=next],[class*=start]');
+        // 2026-08-29：放宽遍历（div/span/a 也可点击）+ 去掉 offsetParent 判断（有的按钮 offsetParent 为 null 但可点）；
+        // 文本精确/前缀匹配「继续PK/再来/再战」等，优先点击。
+        var els = document.querySelectorAll('button,[role=button],[class*=btn],[class*=again],[class*=retry],[class*=next],[class*=start],div,span,a,li');
         for (var i = 0; i < els.length; i++) {
             var el = els[i];
-            if (el.offsetParent === null) continue;
             var t = (el.textContent || '').trim();
-            if (/再来|再战|继续|重新|下一局|再玩|再来一局|again|retry|restart|continue/i.test(t)) {
+            if (!t || t.length > 12) continue;
+            if (/^(继续PK|再战|再来|再玩|下一局|继续|重新开始|ok)/.test(t) || /再来|再战|继续PK|下一局|再来一局|重新开始/i.test(t)) {
                 try { el.click(); return true; } catch (e) { try { el.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true; } catch (e2) {} }
             }
         }
         return false;
     }
-    function triggerAgain() {
+    function triggerAgainNow() {
         if (strategyVue()) { dbg('[cyclic] vue strategy ok'); return; }
         if (strategyButton()) { dbg('[cyclic] button strategy ok'); return; }
-        setTimeout(function () { try { window.location.reload(); } catch (e) {} }, 800);
+        // 兜底：连点几次后 reload（openSchema 兜底接管跳转）
+        setTimeout(function () { try { window.location.reload(); } catch (e) {} }, 900);
     }
-    setTimeout(function () { dbg('[cyclic] js injected'); triggerAgain(); }, getInterval());
+    // 结果页就绪后多次尝试（按钮可能延迟渲染），最多 ~15s
+    var attempt = 0;
+    var loop = setInterval(function () {
+        attempt++;
+        triggerAgainNow();
+        if (attempt > 15) { clearInterval(loop); dbg('[cyclic] gave up after ' + attempt); }
+    }, maxInterval());
+    function maxInterval() { return getInterval() > 0 ? getInterval() : 1500; }
+    dbg('[cyclic] js injected');
 }, 0);
