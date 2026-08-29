@@ -2,6 +2,7 @@ package cn.nizou.sxd.hook
 
 import android.util.Base64
 import cn.nizou.sxd.Classname
+import cn.nizou.sxd.util.AnswerCache
 import cn.nizou.sxd.util.Simian
 import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.logI
