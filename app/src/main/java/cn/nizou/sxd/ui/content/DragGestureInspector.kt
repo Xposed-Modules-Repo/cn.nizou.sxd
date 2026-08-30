@@ -25,7 +25,6 @@ suspend fun PointerInputScope.inspectDragGestures(
     onDragStart: (down: PointerInputChange) -> Unit = {},
     onDragEnd: (change: PointerInputChange) -> Unit = {},
     onDragCancel: () -> Unit = {},
-    consumeOnDrag: Boolean = false,
     onDrag: (change: PointerInputChange, dragAmount: Offset) -> Unit
 ) {
     awaitEachGesture {
@@ -38,13 +37,7 @@ suspend fun PointerInputScope.inspectDragGestures(
         val upEvent =
             drag(
                 pointerId = initialDown.id,
-                onDrag = { change ->
-                    onDrag(change, change.positionChange())
-                    // 仅在需要阻止下层抢手势的调用方（DampedDragAnimation：防 HorizontalPager
-                    // scrollable 抢走同向水平手势）消费事件；InteractiveHighlight 等观察型
-                    // 手势不消费，否则外层先 consume 会让内层拖动手势收到已消费事件直接 cancel。
-                    if (consumeOnDrag) change.consume()
-                }
+                onDrag = { onDrag(it, it.positionChange()) }
             )
         if (upEvent == null) {
             onDragCancel()

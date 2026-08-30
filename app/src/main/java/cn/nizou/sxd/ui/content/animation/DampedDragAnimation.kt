@@ -86,7 +86,6 @@ class DampedDragAnimation(
         var longPressJob: Job? = null
 
         inspectDragGestures(
-            consumeOnDrag = true, // 防下层 HorizontalPager scrollable 抢走水平手势
             onDragStart = { down ->
                 downPosition = down.position
                 movedBeyondTouchSlop = false
