@@ -1,5 +1,8 @@
 package cn.nizou.sxd.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +39,7 @@ import cn.nizou.sxd.util.StringRes
 import cn.nizou.sxd.util.openGithub
 import cn.nizou.sxd.util.openSettingsInHostApp
 import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.outlined.Forum
 import com.composables.icons.materialsymbols.outlined.Public
 import com.composables.icons.materialsymbols.outlined.Rocket_launch
 import com.composables.icons.materialsymbols.outlined.Settings
@@ -136,6 +140,18 @@ fun ModuleMainScreen(
                 title = "GitHub",
                 description = "github.com/sxd91/nizou",
                 onClick = { context.openGithub() }
+            )
+
+            // QQ 交流群（点击复制群号）
+            LauncherCard(
+                icon = MaterialSymbols.Outlined.Forum,
+                title = "QQ 交流群",
+                description = "群号 994173459，点击复制",
+                onClick = {
+                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("QQ群", "994173459"))
+                    Toast.makeText(context, "QQ 群号已复制：994173459", Toast.LENGTH_SHORT).show()
+                }
             )
         }
     }

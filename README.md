@@ -10,6 +10,9 @@
 ![Android 16](https://img.shields.io/badge/Android-16-3DDC84?logo=android&logoColor=white)
 ![LSPosed API 102](https://img.shields.io/badge/LSPosed-API%20102-blue)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![QQ 群](https://img.shields.io/badge/QQ群-994173459-12B7F5)](https://qm.qq.com/q/994173459)
+
+> 💬 **QQ 交流群：`994173459`**（反馈问题 / 获取新版本 / 交流使用）
 
 </div>
 
@@ -55,14 +58,14 @@
 | 项目 | 支持范围 |
 | --- | --- |
 | 宿主 App | 小猿口算 `com.fenbi.android.leo` |
-| 适配版本 | `3.140.1`（versionCode 31400199） |
+| 适配版本 | `3.140.1` **左右的版本均可**（各 Hook 对目标类/方法做存在性容错，类缺失自动跳过；以 3.140.1 实测为准） |
 | Android | Android 16 / API 36 |
 | 架构 | arm64-v8a / armeabi-v7a / x86 / x86_64（universal） |
 | LSPosed | Modern API 102（npatch / Zygisk 均可） |
 | 作用域 | `com.fenbi.android.leo` |
 | Root | 需要（LSPosed 环境） |
 
-> **如果其它版本的小猿口算无法注入 / 功能不生效，请更换为 `3.140.1` 版本。** 模块各 Hook 对目标类 / 方法做存在性容错（`findClassIfExists` + `runCatching`），类缺失时自动跳过对应功能，但部分新版本功能以 3.140.1 实测为准。
+> **`3.140.1` 左右的版本均可使用**：模块各 Hook 对目标类 / 方法做存在性容错（`findClassIfExists` + `runCatching` + 方法签名定位），类缺失时自动跳过对应功能；个别功能以 3.140.1 实测为准，其它版本遇到不生效请加 QQ 群 `994173459` 反馈。
 
 ## 安装与使用
 
