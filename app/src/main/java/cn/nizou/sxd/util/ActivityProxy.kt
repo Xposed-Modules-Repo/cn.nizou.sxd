@@ -2,7 +2,6 @@ package cn.nizou.sxd.util
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.ActivityThread
 import android.app.Application
 import android.app.Instrumentation
 import android.content.ComponentName
@@ -15,7 +14,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
 import android.os.Message
 import android.os.PersistableBundle
 import android.util.Log
@@ -51,6 +49,10 @@ import java.util.concurrent.ConcurrentHashMap
  * 结果：用户从宿主设置页点「老挂戏老叟设置」→ startActivity(模块 Activity) → 系统以为启动了
  * 宿主 SplashActivity → 实际创建的实例是模块 HostSettingsActivity（完整 Activity 生命周期、
  * 转场动画、预测返回），配置读写仍在宿主进程直读（与 ComponentDialog 相同，功能不受影响）。
+ *
+ * ⚠️ ActivityThread / TestLooperManager 等是隐藏 API：一律经反射访问（本项目无 stubs 库，
+ * wekit 有 libs/common/stubs 所以能直接 import）。object 内的嵌套类用 Kotlin 静态嵌套类 +
+ * 显式 `ActivityProxy.` 前缀访问外部成员（object 不允许 inner class）。
  */
 object ActivityProxy {
 
@@ -94,6 +96,12 @@ object ActivityProxy {
         }
     }
 
+    /** 反射取当前 ActivityThread（隐藏 API）。 */
+    private fun currentActivityThread(): Any? = runCatching {
+        Class.forName("android.app.ActivityThread")
+            .getMethod("currentActivityThread").invoke(null)
+    }.getOrNull()
+
     /**
      * 初始化借壳引擎。必须在宿主进程早期（Application.attach 之后、任何模块 Activity 启动前）
      * 调用一次；失败不影响其余 hook（runCatching 包裹）。
@@ -113,31 +121,31 @@ object ActivityProxy {
                 hostClassLoader = hostCl
 
                 val clazzActivityThread = Class.forName("android.app.ActivityThread")
-                val currentActivityThread = ActivityThread.currentActivityThread()
+                val current = currentActivityThread()
                     ?: throw IllegalStateException("ActivityThread not ready")
 
                 // 1) hook Instrumentation（newActivity / callActivityOnCreate 拦截）
                 val mInstrumentationField = clazzActivityThread.getDeclaredField("mInstrumentation")
                     .apply { isAccessible = true }
-                val instrumentation = mInstrumentationField.get(currentActivityThread) as Instrumentation
+                val instrumentation = mInstrumentationField.get(current) as Instrumentation
                 if (instrumentation !is ProxyInstrumentation) {
-                    mInstrumentationField.set(currentActivityThread, ProxyInstrumentation(instrumentation))
+                    mInstrumentationField.set(current, ProxyInstrumentation(instrumentation))
                 }
 
                 // 2) hook Handler mH（LAUNCH_ACTIVITY / EXECUTE_TRANSACTION 还原 Intent）
                 val oriHandler = clazzActivityThread.getDeclaredField("mH")
-                    .apply { isAccessible = true }.get(currentActivityThread) as Handler
+                    .apply { isAccessible = true }.get(current) as Handler
                 val callbackField = Handler::class.java.getDeclaredField("mCallback").apply { isAccessible = true }
-                val current = callbackField.get(oriHandler) as? Handler.Callback
-                if (current == null || current.javaClass.name != ProxyHandlerCallback::class.java.name) {
-                    callbackField.set(oriHandler, ProxyHandlerCallback(current))
+                val cb = callbackField.get(oriHandler) as? Handler.Callback
+                if (cb == null || cb.javaClass.name != ProxyHandlerCallback::class.java.name) {
+                    callbackField.set(oriHandler, ProxyHandlerCallback(cb))
                 }
 
                 // 3) hook IActivityManager / IActivityTaskManager（startActivity 换壳）
                 hookActivityManagerProxy()
 
                 // 4) hook PackageManager（getActivityInfo 伪造模块 Activity）
-                hookPackageManager(currentActivityThread, clazzActivityThread)
+                hookPackageManager(current, clazzActivityThread)
 
                 initialized = true
                 Log.i(TAG, "ActivityProxy initialized")
@@ -154,8 +162,7 @@ object ActivityProxy {
         fun hookSingleton(singleton: Any?, iface: Class<*>) {
             if (singleton == null) return
             runCatching {
-                val singletonClass = singleton.javaClass
-                singletonClass.getDeclaredMethod("get").apply { isAccessible = true }.invoke(singleton)
+                singleton.javaClass.getDeclaredMethod("get").apply { isAccessible = true }.invoke(singleton)
             }
             val instanceField = singleton.javaClass.getDeclaredField("mInstance").apply { isAccessible = true }
             val instance = instanceField.get(singleton) ?: return
@@ -193,7 +200,13 @@ object ActivityProxy {
                 .apply { isAccessible = true }
             val packageManagerImpl = sPackageManagerField.get(sCurrentActivityThread) ?: return
             val iPackageManagerInterface = Class.forName("android.content.pm.IPackageManager")
-            val pm = ActivityThread.currentActivityThread()?.applicationContext?.packageManager ?: return
+            val pm = currentActivityThread()
+                ?.let { at ->
+                    runCatching {
+                        at.javaClass.getMethod("getApplication").invoke(at) as? Context
+                    }.getOrNull()
+                }
+                ?.applicationContext?.packageManager ?: return
             val mPmField = pm.javaClass.getDeclaredField("mPM").apply { isAccessible = true }
 
             val pmProxy = Proxy.newProxyInstance(
@@ -239,18 +252,18 @@ object ActivityProxy {
     }
 
     /** IActivityManager / IActivityTaskManager 动态代理：拦截 startActivity 系列换壳。 */
-    private inner class ActivityManagerInvocationHandler(private val origin: Any) : InvocationHandler {
+    private class ActivityManagerInvocationHandler(private val origin: Any) : InvocationHandler {
         override fun invoke(proxy: Any, method: Method, args: Array<Any?>?): Any? {
             val mutableArgs = args ?: emptyArray()
             if (method.name.startsWith("startActivity")) {
                 mutableArgs.forEachIndexed { i, arg ->
                     when (arg) {
-                        is Intent -> if (shouldProxy(arg)) mutableArgs[i] = createTokenWrapper(arg)
+                        is Intent -> if (ActivityProxy.shouldProxy(arg)) mutableArgs[i] = ActivityProxy.createTokenWrapper(arg)
                         is Array<*> -> {
                             @Suppress("UNCHECKED_CAST")
                             val intents = arg as? Array<Intent?> ?: return@forEachIndexed
                             intents.forEachIndexed { j, intent ->
-                                if (intent != null && shouldProxy(intent)) intents[j] = createTokenWrapper(intent)
+                                if (intent != null && ActivityProxy.shouldProxy(intent)) intents[j] = ActivityProxy.createTokenWrapper(intent)
                             }
                         }
                     }
@@ -265,7 +278,7 @@ object ActivityProxy {
     }
 
     /** ActivityThread.mH 回调：LAUNCH_ACTIVITY / EXECUTE_TRANSACTION 时把壳 Intent 还原为真实 Intent。 */
-    private inner class ProxyHandlerCallback(private val next: Handler.Callback?) : Handler.Callback {
+    private class ProxyHandlerCallback(private val next: Handler.Callback?) : Handler.Callback {
         private data class RecoveredIntent(val token: String, val intent: Intent)
 
         override fun handleMessage(msg: Message): Boolean {
@@ -280,15 +293,15 @@ object ActivityProxy {
 
         private fun recoverIntent(wrapper: Intent?): RecoveredIntent? {
             wrapper ?: return null
-            wrapper.setExtrasClassLoader(hybridClassLoader)
+            wrapper.setExtrasClassLoader(ActivityProxy.hybridClassLoader)
             if (!wrapper.hasExtra(ACTIVITY_PROXY_INTENT_TOKEN)) return null
             val token = wrapper.getStringExtra(ACTIVITY_PROXY_INTENT_TOKEN) ?: return null
             val real = IntentTokenCache.get(token) ?: run {
                 Log.w(TAG, "token expired or lost: $token")
                 return null
             }
-            real.setExtrasClassLoader(hybridClassLoader)
-            real.extras?.classLoader = hybridClassLoader
+            real.setExtrasClassLoader(ActivityProxy.hybridClassLoader)
+            real.extras?.classLoader = ActivityProxy.hybridClassLoader
             return RecoveredIntent(token, real)
         }
 
@@ -333,7 +346,7 @@ object ActivityProxy {
         @SuppressLint("PrivateApi", "DiscouragedPrivateApi")
         private fun updateLaunchingActivityIntent(transaction: Any, intent: Intent) {
             val token = transaction.javaClass.getMethod("getActivityToken").invoke(transaction) as IBinder
-            val activityThread = ActivityThread.currentActivityThread()
+            val activityThread = ActivityProxy.currentActivityThread()
             val record = activityThread.javaClass
                 .getMethod("getLaunchingActivity", IBinder::class.java)
                 .invoke(activityThread, token) ?: return
@@ -343,12 +356,12 @@ object ActivityProxy {
     }
 
     /** Instrumentation 子类：拦截模块 Activity 的创建与 onCreate 前置（资源注入 + hybrid loader）。 */
-    private inner class ProxyInstrumentation(private val base: Instrumentation) : Instrumentation() {
+    private class ProxyInstrumentation(private val base: Instrumentation) : Instrumentation() {
 
         @SuppressLint("NewApi")
         override fun newActivity(cl: ClassLoader, className: String, intent: Intent): Activity {
-            if (isModuleProxyActivity(className)) {
-                val moduleCl = moduleClassLoader ?: cl
+            if (ActivityProxy.isModuleProxyActivity(className)) {
+                val moduleCl = ActivityProxy.moduleClassLoader ?: cl
                 runCatching {
                     return moduleCl.loadClass(className).getDeclaredConstructor().newInstance() as Activity
                 }.onFailure { e ->
@@ -368,22 +381,22 @@ object ActivityProxy {
         )
 
         override fun callActivityOnCreate(activity: Activity, icicle: Bundle?) {
-            if (isModuleProxyActivity(activity.javaClass.name)) {
+            if (ActivityProxy.isModuleProxyActivity(activity.javaClass.name)) {
                 ModuleResourceInjector.injectModuleRes(activity.resources)
                 runCatching {
                     Activity::class.java.getDeclaredField("mClassLoader")
-                        .apply { isAccessible = true }.set(activity, hybridClassLoader)
+                        .apply { isAccessible = true }.set(activity, ActivityProxy.hybridClassLoader)
                 }
                 activity.intent?.let { intent ->
-                    intent.setExtrasClassLoader(hybridClassLoader)
-                    intent.extras?.classLoader = hybridClassLoader
+                    intent.setExtrasClassLoader(ActivityProxy.hybridClassLoader)
+                    intent.extras?.classLoader = ActivityProxy.hybridClassLoader
                 }
             }
             base.callActivityOnCreate(activity, icicle)
         }
 
         override fun callActivityOnCreate(activity: Activity, icicle: Bundle?, persistentState: PersistableBundle?) {
-            if (isModuleProxyActivity(activity.javaClass.name)) {
+            if (ActivityProxy.isModuleProxyActivity(activity.javaClass.name)) {
                 ModuleResourceInjector.injectModuleRes(activity.resources)
             }
             base.callActivityOnCreate(activity, icicle, persistentState)
@@ -414,18 +427,27 @@ object ActivityProxy {
         override fun waitForIdleSync() = base.waitForIdleSync()
         override fun runOnMainSync(runner: Runnable?) = base.runOnMainSync(runner)
         override fun startActivitySync(intent: Intent): Activity? = base.startActivitySync(intent)
-        override fun startActivitySync(intent: Intent, options: Bundle?): Activity =
+        override fun startActivitySync(intent: Intent, options: Bundle?): Activity? =
             base.startActivitySync(intent, options)
-        override fun addMonitor(monitor: Instrumentation.ActivityMonitor?) = base.addMonitor(monitor)
-        override fun addMonitor(filter: IntentFilter?, result: Instrumentation.ActivityResult?, block: Boolean): Instrumentation.ActivityMonitor =
-            base.addMonitor(filter, result, block)
-        override fun addMonitor(cls: String?, result: Instrumentation.ActivityResult?, block: Boolean): Instrumentation.ActivityMonitor =
-            base.addMonitor(cls, result, block)
+        override fun addMonitor(monitor: Instrumentation.ActivityMonitor?) =
+            base.addMonitor(monitor)
+        override fun addMonitor(
+            filter: IntentFilter?,
+            result: Instrumentation.ActivityResult?,
+            block: Boolean,
+        ): Instrumentation.ActivityMonitor = base.addMonitor(filter, result, block)
+        override fun addMonitor(
+            cls: String?,
+            result: Instrumentation.ActivityResult?,
+            block: Boolean,
+        ): Instrumentation.ActivityMonitor = base.addMonitor(cls, result, block)
         override fun checkMonitorHit(monitor: Instrumentation.ActivityMonitor?, minHits: Int) =
             base.checkMonitorHit(monitor, minHits)
-        override fun waitForMonitor(monitor: Instrumentation.ActivityMonitor?): Instrumentation.ActivityMonitor? =
+        // ⚠️ 真实 SDK 中 waitForMonitor 返回 Activity（wekit 的 stubs 库把签名改成返回
+        // ActivityMonitor 才能那样写；本项目无 stubs，按真实签名 Activity? 声明）。
+        override fun waitForMonitor(monitor: Instrumentation.ActivityMonitor?): Activity? =
             base.waitForMonitor(monitor)
-        override fun waitForMonitorWithTimeout(monitor: Instrumentation.ActivityMonitor?, timeOut: Long): Instrumentation.ActivityMonitor? =
+        override fun waitForMonitorWithTimeout(monitor: Instrumentation.ActivityMonitor?, timeOut: Long): Activity? =
             base.waitForMonitorWithTimeout(monitor, timeOut)
         override fun removeMonitor(monitor: Instrumentation.ActivityMonitor?) = base.removeMonitor(monitor)
         override fun invokeMenuActionSync(targetActivity: Activity?, id: Int, flags: Int) =
@@ -482,12 +504,10 @@ object ActivityProxy {
 
         override fun getUiAutomation(): android.app.UiAutomation = base.uiAutomation
         override fun getUiAutomation(flags: Int): android.app.UiAutomation = base.getUiAutomation(flags)
-        override fun acquireLooperManager(looper: Looper): android.app.TestLooperManager =
-            base.acquireLooperManager(looper)
     }
 
     /** PackageManager 动态代理：模块代理 Activity 的 getActivityInfo 返回伪造 ActivityInfo。 */
-    inner class PackageManagerInvocationHandler(private val target: Any) : InvocationHandler {
+    class PackageManagerInvocationHandler(private val target: Any) : InvocationHandler {
         override fun invoke(proxy: Any, method: Method, args: Array<Any?>?): Any? {
             if (method.name == "getActivityInfo" && args != null) {
                 var component: ComponentName? = null
@@ -496,8 +516,8 @@ object ActivityProxy {
                         is ComponentName -> component = arg
                     }
                 }
-                if (component != null && isModuleProxyActivity(component.className)) {
-                    return makeProxyActivityInfo(component.className)
+                if (component != null && ActivityProxy.isModuleProxyActivity(component.className)) {
+                    return ActivityProxy.makeProxyActivityInfo(component.className)
                 }
             }
             return try {
