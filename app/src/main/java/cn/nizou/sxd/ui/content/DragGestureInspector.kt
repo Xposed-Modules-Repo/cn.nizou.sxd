@@ -37,7 +37,12 @@ suspend fun PointerInputScope.inspectDragGestures(
         val upEvent =
             drag(
                 pointerId = initialDown.id,
-                onDrag = { onDrag(it, it.positionChange()) }
+                onDrag = { change ->
+                    onDrag(change, change.positionChange())
+                    // 消费水平拖动，防止漏给下层（MainPager 的 HorizontalPager scrollable
+                    // 会抢走同向手势 → 底栏拖动不跟手/弹回；wekit 是独立页无此冲突，本项目必须消费）
+                    change.consume()
+                }
             )
         if (upEvent == null) {
             onDragCancel()

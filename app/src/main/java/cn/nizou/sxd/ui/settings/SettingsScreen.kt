@@ -28,6 +28,7 @@ import com.composables.icons.materialsymbols.outlined.Contrast
 import com.composables.icons.materialsymbols.outlined.File_download
 import com.composables.icons.materialsymbols.outlined.File_upload
 import com.composables.icons.materialsymbols.outlined.Label
+import com.composables.icons.materialsymbols.outlined.Screen_rotation
 import com.composables.icons.materialsymbols.outlined.Style
 import com.composables.icons.materialsymbols.outlined.Swipe
 import com.composables.icons.materialsymbols.outlined.Wallpaper
@@ -162,6 +163,14 @@ private fun ThemeSection() {
             description = "使用系统壁纸的强调色作为种子，需系统 Android SDK ≥ 31",
             checked = ThemeSettings.dynamicWallpaper,
             onCheckedChange = ThemeSettings::updateDynamicWallpaper,
+        )
+
+        SwitchWidget(
+            icon = MaterialSymbols.Outlined.Screen_rotation,
+            title = "陀螺仪光效",
+            description = "底栏指示器高光随设备倾斜旋转（默认关闭）",
+            checked = ThemeSettings.gravityHighlight,
+            onCheckedChange = ThemeSettings::updateGravityHighlight,
         )
 
         // 壁纸取色开启时隐藏自定义种子行（wekit 用 item(animatedVisibility=...)，

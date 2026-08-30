@@ -16,6 +16,7 @@ import cn.nizou.sxd.KEY_START_SETTINGS
 import cn.nizou.sxd.api.LegacyApiService
 import cn.nizou.sxd.api.OralApiService
 import cn.nizou.sxd.ui.host.HostComposePanel
+import cn.nizou.sxd.util.HostResultBus
 import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.logI
 import io.github.libxposed.api.XposedInterface
@@ -36,6 +37,39 @@ class SettingHook(
         hookSettingActivity()
         hookRouterActivity()
         hookHomeActivity()
+        hookOnActivityResult()
+    }
+
+    /**
+     * 钩住宿主设置页 onActivityResult → [HostResultBus]。
+     *
+     * 注入面板（ComponentDialog）起 SAF 需要宿主 Activity.startActivityForResult 发起、
+     * 结果回到宿主 onActivityResult；面板回调在宿主进程内直读写 prefs（内存权威，免 root）。
+     * 用 getMethod 取 public（含继承）签名，宿主 Activity 未重写时 hook 基类方法，对所有
+     * Activity 生效但只分发匹配 requestCode，无副作用。
+     */
+    private fun hookOnActivityResult() {
+        val settingsActivityClass = findClass(Classname.SETTINGS_ACTIVITY)
+        val method = runCatching {
+            settingsActivityClass.getMethod(
+                "onActivityResult",
+                Int::class.javaPrimitiveType,
+                Int::class.javaPrimitiveType,
+                Intent::class.java,
+            )
+        }.getOrNull() ?: return
+        method.intercept("settings_onActivityResult") { chain ->
+            val r = chain.proceed()
+            val args = chain.args
+            if (args.size >= 3) {
+                HostResultBus.dispatch(
+                    (args[0] as? Int) ?: -1,
+                    (args[1] as? Int) ?: 0,
+                    args[2] as? Intent,
+                )
+            }
+            r
+        }
     }
 
     private fun hookRouterActivity() {

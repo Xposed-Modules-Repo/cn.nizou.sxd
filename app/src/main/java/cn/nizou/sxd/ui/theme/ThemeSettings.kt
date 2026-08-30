@@ -42,6 +42,7 @@ object ThemeSettings {
     private const val KEY_PALETTE_STYLE = "theme_palette_style"
     private const val KEY_COLOR_SPEC = "theme_color_spec"
     private const val KEY_SEED_COLOR = "theme_seed_color"
+    private const val KEY_GRAVITY_HIGHLIGHT = "theme_gravity_highlight"
 
     /** 默认取色（模块绿，对齐 wekit 语义：wekit 默认是微信绿 0xFF07C160）。 */
     const val DEFAULT_SEED_COLOR: Int = 0xFF2E7D32.toInt()
@@ -83,6 +84,12 @@ object ThemeSettings {
     /** 自定义取色（ARGB int，壁纸取色关闭时使用）。 */
     var seedColor by mutableIntStateOf(
         SettingsPrefs.readInt(KEY_SEED_COLOR, DEFAULT_SEED_COLOR)
+    )
+        private set
+
+    /** 底栏陀螺仪光效（默认关，用户要求）：指示器高光随设备倾斜旋转。 */
+    var gravityHighlight by mutableStateOf(
+        SettingsPrefs.readBoolean(prefsRes, KEY_GRAVITY_HIGHLIGHT, false)
     )
         private set
 
@@ -128,6 +135,11 @@ object ThemeSettings {
     fun updateSeedColor(value: Int) {
         seedColor = value
         SettingsPrefs.writeInt(KEY_SEED_COLOR, value)
+    }
+
+    fun updateGravityHighlight(value: Boolean) {
+        gravityHighlight = value
+        SettingsPrefs.writeBoolean(prefsRes, KEY_GRAVITY_HIGHLIGHT, value)
     }
 
     /** ARGB int → HSV float[3]。 */
