@@ -7,13 +7,25 @@ import android.util.Log
 import cn.nizou.sxd.HOST_PACKAGE_NAME
 import cn.nizou.sxd.MODULE_PREFS_NAME
 import cn.nizou.sxd.hook.BaseHook
-import cn.nizou.sxd.util.ConfigTransfer
 import cn.nizou.sxd.util.DexKitLocator
 import cn.nizou.sxd.util.HookStatus
 import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.crash.JavaCrashHandler
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.float
+import kotlinx.serialization.json.floatOrNull
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
+import kotlinx.serialization.json.longOrNull
 
 /**
  * libxposed API 102 入口。继承 XposedModule，框架自动 attachFramework；
@@ -108,8 +120,10 @@ class XposedInit : XposedModule() {
                         ctx.getSharedPreferences(MODULE_PREFS_NAME, android.content.Context.MODE_PRIVATE)
                             .edit().putBoolean("hook_active", true).apply()
                     }.onFailure { Log.e("AutoOral", "markActive(local) failed", it) }
-                    // 首次启动注入默认配置（2026-08-30 用户提供，账号类 ui_ 键已剔除；
-                    // importJson 走宿主进程直写 modulePrefs，一次性填充后打标记）。
+                    // 首次启动注入默认配置（2026-08-30 用户提供，账号类 ui_ 键已剔除）。
+                    // ⚠️ 不能用 ConfigTransfer.importJson：attach 时机 currentApplication() 未就绪
+                    // （ActivityThread.mInitialApplication 尚未赋值）→ isHostProcess() 误判为模块进程
+                    // → 走 root 分支 force-stop 宿主 → 闪退（真机 79d35f0 复现）。直接用 ctx 直写。
                     runCatching {
                         val ctx = chain.thisObject as? android.content.Context ?: return@runCatching
                         val prefs = ctx.getSharedPreferences(
@@ -118,9 +132,31 @@ class XposedInit : XposedModule() {
                         if (!prefs.getBoolean("default_config_applied", false)) {
                             val json = moduleRes.assets.open("default_config.json")
                                 .bufferedReader().use { it.readText() }
-                            if (ConfigTransfer.importJson(json) == null) {
-                                prefs.edit().putBoolean("default_config_applied", true).apply()
+                            val root = Json.parseToJsonElement(json).jsonObject
+                            val editor = prefs.edit().clear()
+                            for ((k, v) in root) {
+                                if (k.startsWith("ui_")) continue
+                                when (v) {
+                                    is JsonPrimitive -> when {
+                                        v.isString -> editor.putString(k, v.content)
+                                        v.booleanOrNull != null ->
+                                            editor.putBoolean(k, v.boolean)
+
+                                        v.longOrNull != null && v.intOrNull == null ->
+                                            editor.putLong(k, v.long)
+
+                                        v.intOrNull != null -> editor.putInt(k, v.int)
+                                        v.floatOrNull != null -> editor.putFloat(k, v.float)
+                                    }
+                                    is JsonArray -> editor.putStringSet(
+                                        k,
+                                        v.mapNotNull { runCatching { it.jsonPrimitive.content }.getOrNull() }.toSet(),
+                                    )
+                                    else -> Unit
+                                }
                             }
+                            editor.commit()
+                            prefs.edit().putBoolean("default_config_applied", true).apply()
                         }
                     }.onFailure { Log.e("AutoOral", "default config init failed", it) }
                 } catch (e: Throwable) {
