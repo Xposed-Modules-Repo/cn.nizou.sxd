@@ -26,11 +26,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import cn.nizou.sxd.HOST_PACKAGE_NAME
 import cn.nizou.sxd.MODULE_PREFS_NAME
 import cn.nizou.sxd.XposedInit
 import cn.nizou.sxd.util.currentApplication
 import cn.nizou.sxd.util.logI
+import cn.nizou.sxd.util.mainHandler
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 
 /**
  * 激活检测卡片（真实状态，不硬编码）。
@@ -67,8 +70,13 @@ fun HookStatusCard(modifier: Modifier = Modifier) {
             XposedInit.self.getRemotePreferences(MODULE_PREFS_NAME)
                 .getBoolean("hook_active", false)
         }.getOrNull() ?: false
-        // 3) root 直读宿主 shared_prefs（真实注入状态，模块本体进程 root 可用）
-        val hostPrefs = readHostHookActive()
+        // 3) root 直读宿主 shared_prefs（真实注入状态）——**仅在非宿主进程执行**：
+        //    宿主进程 local 已足够（写入的就是宿主自己）；且 su 是阻塞调用，必须在后台线程，
+        //    绝不能卡 Compose 主线程（否则 ANR/闪退）。
+        val isHostProcess = runCatching {
+            currentApplication()?.packageName == HOST_PACKAGE_NAME
+        }.getOrDefault(false)
+        val hostPrefs = if (isHostProcess) false else readHostHookActive()
         logI("HookStatus: local=$local remote=$remote hostPrefs=$hostPrefs")
         return local || remote || hostPrefs
     }
@@ -85,8 +93,14 @@ fun HookStatusCard(modifier: Modifier = Modifier) {
     }
 
     LaunchedEffect(Unit) {
-        activated = readStatus()
-        checked = true
+        // 检测含阻塞式 su 调用（root 读取），必须放后台线程，结果回主线程更新 UI
+        thread {
+            val result = readStatus()
+            mainHandler.post {
+                activated = result
+                checked = true
+            }
+        }
     }
 
     val containerColor = if (activated) Color(0xFF2E7D32) else Color(0xFFC62828)
@@ -160,15 +174,20 @@ fun HookStatusCard(modifier: Modifier = Modifier) {
     }
 }
 
-/** root 直读宿主 shared_prefs 的 hook_active（模块本体独立进程验证真实注入状态）。 */
+/** root 直读宿主 shared_prefs 的 hook_active（模块本体独立进程验证真实注入状态）。
+ *  仅在后台线程调用；su 挂起超 2s 直接放弃，绝不让调用方无限等待。 */
 private fun readHostHookActive(): Boolean {
     return runCatching {
         val p = ProcessBuilder(
             "su", "-c",
             "cat /data/data/com.fenbi.android.leo/shared_prefs/auto_oral_calculation.xml"
         ).redirectErrorStream(true).start()
+        if (!p.waitFor(2, TimeUnit.SECONDS)) {
+            p.destroy()
+            logI("HookStatus: su timeout, treat as inactive")
+            return false
+        }
         val text = p.inputStream.bufferedReader().readText()
-        p.waitFor(3, TimeUnit.SECONDS)
         p.destroy()
         text.contains("name=\"hook_active\"") && text.contains("value=\"true\"")
     }.getOrDefault(false)
