@@ -9,13 +9,16 @@
 package cn.nizou.sxd.ui.content.animation
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.MutatorMutex
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.IntSize
 import cn.nizou.sxd.ui.content.inspectDragGestures
 import kotlinx.coroutines.CoroutineScope
@@ -45,8 +48,6 @@ class DampedDragAnimation(
 
     private val valueAnimationSpec =
         spring(1f, 1000f, visibilityThreshold)
-    private val velocityAnimationSpec =
-        spring(0.5f, 300f, visibilityThreshold * 10f)
     private val pressProgressAnimationSpec =
         spring(1f, 1000f, 0.001f)
     private val scaleXAnimationSpec =
@@ -54,10 +55,12 @@ class DampedDragAnimation(
     private val scaleYAnimationSpec =
         spring(0.7f, 250f, 0.001f)
 
-    private val valueAnimation =
-        Animatable(initialValue, visibilityThreshold)
-    private val velocityAnimation =
-        Animatable(0f, 5f)
+    // 指示器位置：普通 Compose 状态，拖动时**同步写**（零延迟跟手，无协程/无 spring
+    // 追赶——wekit 原版每次 move 启动 animateTo 导致指示器永远落后手指，表现为不跟手/越拖越慢）；
+    // 松手/点击才用 animate 协程做 spring 回位动画。
+    private var valueState by mutableFloatStateOf(initialValue)
+    private var targetValueState by mutableFloatStateOf(initialValue)
+
     private val pressProgressAnimation =
         Animatable(0f, 0.001f)
     private val scaleXAnimation =
@@ -67,14 +70,14 @@ class DampedDragAnimation(
 
     private val mutatorMutex = MutatorMutex()
 
-    private val velocityTracker = VelocityTracker()
-
-    val value: Float get() = valueAnimation.value
-    val targetValue: Float get() = valueAnimation.targetValue
+    val value: Float get() = valueState
+    val targetValue: Float get() = targetValueState
     val pressProgress: Float get() = pressProgressAnimation.value
     val scaleX: Float get() = scaleXAnimation.value
     val scaleY: Float get() = scaleYAnimation.value
-    val velocity: Float get() = velocityAnimation.value
+    // velocity 不再追踪（原 VelocityTracker 每帧 System.currentTimeMillis+协程，徒增开销；
+    // 仅影响 pill 的速度变形视觉效果，略去后无感知差异）
+    val velocity: Float get() = 0f
 
     val modifier: Modifier = Modifier.pointerInput(Unit) {
         val touchSlopSquared = viewConfiguration.touchSlop.let { it * it }
@@ -149,7 +152,6 @@ class DampedDragAnimation(
     }
 
     fun press() {
-        velocityTracker.resetTracking()
         animationScope.launch {
             launch { pressProgressAnimation.animateTo(1f, pressProgressAnimationSpec) }
             launch { scaleXAnimation.animateTo(pressedScale, scaleXAnimationSpec) }
@@ -162,8 +164,8 @@ class DampedDragAnimation(
             awaitFrame()
             if (value != targetValue) {
                 val threshold = (valueRange.endInclusive - valueRange.start) * 0.025f
-                snapshotFlow { valueAnimation.value }
-                    .filter { abs(it - valueAnimation.targetValue) < threshold }
+                snapshotFlow { valueState }
+                    .filter { abs(it - targetValueState) < threshold }
                     .first()
             }
             launch { pressProgressAnimation.animateTo(0f, pressProgressAnimationSpec) }
@@ -172,43 +174,30 @@ class DampedDragAnimation(
         }
     }
 
-    fun updateValue(value: Float) {
-        val targetValue = value.coerceIn(valueRange)
-        animationScope.launch {
-            launch { valueAnimation.animateTo(targetValue, valueAnimationSpec) { updateVelocity() } }
-        }
-    }
-
-    /**
-     * 拖动跟手：直接设置值（无动画）。拖动中高频调用时用 snap（spring 每次重启会
-     * 追不上手指，表现为「越拖越慢」，wekit 原版 onDrag 用 updateValue 有此问题）；
-     * 松手回位仍走 [animateToValue]/[updateValue] 动画。
-     */
+    /** 拖动跟手：**同步**写值（普通状态直接赋值，零延迟无协程）。 */
     fun snapToValue(value: Float) {
         val target = value.coerceIn(valueRange)
-        animationScope.launch { valueAnimation.snapTo(target) }
+        targetValueState = target
+        valueState = target
     }
 
+    /** 松手/点击回位：spring 动画到目标（含按压缩放效果）。 */
     fun animateToValue(value: Float) {
+        val target = value.coerceIn(valueRange)
+        targetValueState = target
         animationScope.launch {
             mutatorMutex.mutate {
                 press()
-                val targetValue = value.coerceIn(valueRange)
-                launch { valueAnimation.animateTo(targetValue, valueAnimationSpec) }
-                if (velocity != 0f) {
-                    launch { velocityAnimation.animateTo(0f, velocityAnimationSpec) }
-                }
+                animate(
+                    initialValue = valueState,
+                    targetValue = target,
+                    animationSpec = valueAnimationSpec,
+                ) { v, _ -> valueState = v }
                 release()
             }
         }
     }
 
-    private fun updateVelocity() {
-        velocityTracker.addPosition(
-            System.currentTimeMillis(),
-            Offset(value, 0f)
-        )
-        val targetVelocity = velocityTracker.calculateVelocity().x / (valueRange.endInclusive - valueRange.start)
-        animationScope.launch { velocityAnimation.animateTo(targetVelocity, velocityAnimationSpec) }
-    }
+    /** 兼容保留（拖动跟手一律走 [snapToValue]）。 */
+    fun updateValue(value: Float) = animateToValue(value)
 }

@@ -274,7 +274,7 @@ fun <T> FloatingBottomBar(
             onDragStarted = { position ->
                 gestureIndices[0] = currentIndex
                 gestureIndices[1] = indexAt(position.x)
-                updateValue(gestureIndices[1].toFloat())
+                snapToValue(gestureIndices[1].toFloat())
             },
             onDragStopped = {
                 val targetIndex = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
@@ -282,21 +282,22 @@ fun <T> FloatingBottomBar(
                     currentIndex = targetIndex
                     onSelectedUpdated(targetIndex)
                 }
-                updateValue(targetIndex.toFloat())
+                animateToValue(targetIndex.toFloat())
                 animationScope.launch {
                     offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f))
                 }
             },
             onDragCancelled = {
                 currentIndex = gestureIndices[0]
-                updateValue(gestureIndices[0].toFloat())
+                snapToValue(gestureIndices[0].toFloat())
                 animationScope.launch {
                     offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f))
                 }
             },
             onDrag = { _, dragAmount ->
                 if (tabWidthPx > 0f && dragAmount.x != 0f) {
-                    updateValue(
+                    // 同步跟手（零延迟，无 spring 追赶），松手才 spring 回位
+                    snapToValue(
                         (targetValue + dragAmount.x / tabWidthPx * if (isLtr) 1f else -1f)
                             .fastCoerceIn(0f, (tabsCount - 1).toFloat())
                     )
