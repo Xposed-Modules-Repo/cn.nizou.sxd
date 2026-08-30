@@ -7,6 +7,7 @@ import android.util.Log
 import cn.nizou.sxd.HOST_PACKAGE_NAME
 import cn.nizou.sxd.MODULE_PREFS_NAME
 import cn.nizou.sxd.hook.BaseHook
+import cn.nizou.sxd.util.DexKitLocator
 import cn.nizou.sxd.util.HookStatus
 import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.crash.JavaCrashHandler
@@ -80,6 +81,15 @@ class XposedInit : XposedModule() {
                 val r = chain.proceed()
                 try {
                     BaseHook.startHook(this, appClassLoader)
+                    // DexKit 索引初始化（版本适配兜底：类名/方法名混淆时按签名+字符串引用定位，
+                    // 见 skill 05 §8）。首次建索引走后台线程，不阻塞 hook；失败不影响主流程。
+                    kotlin.concurrent.thread {
+                        runCatching {
+                            if (DexKitLocator.init(appClassLoader)) {
+                                Log.i("AutoOral", "DexKit ready")
+                            }
+                        }.onFailure { Log.e("AutoOral", "DexKit init failed", it) }
+                    }
                     // 宿主注入成功后写入激活标记（此时 getRemotePreferences 已就绪）：
                     // 供模块设置页/注入面板读取。写入此位置可避免 onPackageReady 早期 RemotePreferences
                     // 未就绪导致写入被静默吞掉（真机 hook_active 缺失，卡片误显未激活）。

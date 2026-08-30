@@ -79,33 +79,41 @@ class PracticeHook(
         }
     }
 
-    private class QuickExercisePresenterWrapper(presenterClass: Class<*>) {
-        private val startExercise: Method = presenterClass.declaredMethods.first { it.name == "c" }
+    /**
+     * QuickExercisePresenter 方法封装（★ 版本适配：方法名混淆但传参保留 → 签名定位，
+     * 旧混淆名 c/g/e/d 仅作「优先提示」，签名匹配为主，见 skill 05 §8）。
+     */
+    private inner class QuickExercisePresenterWrapper(presenterClass: Class<*>) {
+        private val startExercise: Method? =
+            presenterClass.findMethodBySignature(emptyArray(), Void.TYPE, "c")
 
-        private val getAnswers: Method = presenterClass.declaredMethods.first { it.name == "g" }
+        private val getAnswers: Method? =
+            presenterClass.findMethodBySignature(emptyArray(), List::class.java, "g")
 
-        private val commitAnswer: Method = presenterClass.declaredMethods.first {
-            it.name == "e" && it.parameterCount == 2 && it.parameterTypes[0] == String::class.java && it.parameterTypes[1] == List::class.java
-        }
+        private val commitAnswer: Method? =
+            presenterClass.findMethodBySignature(
+                arrayOf(String::class.java, List::class.java), null, "e"
+            )
 
-        private val nextQuestion: Method = presenterClass.declaredMethods.first {
-            it.name == "d" && it.parameterCount == 2 && it.parameterTypes[0] == Boolean::class.javaPrimitiveType && it.parameterTypes[1] == List::class.java
-        }
+        private val nextQuestion: Method? =
+            presenterClass.findMethodBySignature(
+                arrayOf(Boolean::class.javaPrimitiveType, List::class.java), null, "d"
+            )
 
         fun Any.startExercise() {
-            startExercise.invoke(this)
+            startExercise?.invoke(this)
         }
 
         fun Any.getAnswers(): List<*>? {
-            return getAnswers.invoke(this) as? List<*>
+            return getAnswers?.invoke(this) as? List<*>
         }
 
         fun Any.commitAnswer(answer: String) {
-            commitAnswer.invoke(this, answer, emptyList<Any>() /*wrongScript*/)
+            commitAnswer?.invoke(this, answer, emptyList<Any>() /*wrongScript*/)
         }
 
         fun Any.nextQuestion(autoJump: Boolean, strokes: List<Array<PointF>>) {
-            nextQuestion.invoke(this, autoJump, strokes)
+            nextQuestion?.invoke(this, autoJump, strokes)
         }
     }
 
@@ -150,14 +158,15 @@ class PracticeHook(
                 }
             }
         }
-        // afterAnimation
-        quickExercisePresenterClass.findMethod("N").intercept("presenter_N") { chain ->
-            val r = chain.proceed()
-            if (Practice.autoPractice) {
-                mainHandler.post(performNext)
+        // afterAnimation（版本适配：签名定位 + 名字优先；找不到跳过该 hook，不影响其它）
+        quickExercisePresenterClass.findMethodBySignature(emptyArray(), null, "N")
+            ?.intercept("presenter_N") { chain ->
+                val r = chain.proceed()
+                if (Practice.autoPractice) {
+                    mainHandler.post(performNext)
+                }
+                r
             }
-            r
-        }
 
         val modelClass =
             (quickExerciseActivityClass.genericSuperclass as ParameterizedType).actualTypeArguments[1]

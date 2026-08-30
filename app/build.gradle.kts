@@ -99,6 +99,9 @@ tasks.withType<KotlinCompile> {
 dependencies {
     compileOnly(libs.libxposed.api)
 
+    // --- DexKit（版本适配：按方法参数类型/字符串引用定位混淆类与方法；打包进 APK） ---
+    implementation(libs.dexkit)
+
     // --- Compose Material3 ---
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.foundation)
