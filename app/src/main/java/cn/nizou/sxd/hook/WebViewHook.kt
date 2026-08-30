@@ -183,74 +183,6 @@ class WebViewHook(
         hookShouldInterceptRequest()
     }
 
-    /**
-     * ★ 秒结算 7 patch 正确挂点（2026-08-30 修正）：
-     * PK 页前端 JS bundle 走 **WebView 网络栈**加载（xyks.yuanfudao.com/bh5/leo-web-oral-pk/*.js），
-     * **不经 Retrofit.create** → RetrofitHook 拦不到（1.7.17 的 patch 从未生效）。
-     * 改 hook `WebViewClient.shouldInterceptRequest(WebView, String)`：QUICK 模式下拦截 PK 相关
-     * .js，自己 fetch 原始 bundle → PkBundlePatcher 7 patch → 返回 WebResourceResponse。
-     * 未命中/失败放行原加载（WebView 自行请求）。
-     */
-    private fun hookShouldInterceptRequest() {
-        val webViewClientClass = runCatching { findClass("android.webkit.WebViewClient") }.getOrNull()
-            ?: return logI("WebViewHook: WebViewClient not found, skip intercept")
-        val method = webViewClientClass.methods.firstOrNull {
-            it.name == "shouldInterceptRequest" && it.parameterCount == 2 &&
-                it.parameterTypes[0] == android.webkit.WebView::class.java
-        } ?: return logI("WebViewHook: shouldInterceptRequest(WebView,String) not found, skip intercept")
-        method.intercept("webview_intercept_js") { chain ->
-            if (PK.mode != AutoAnswerMode.QUICK) {
-                return@intercept chain.proceed()
-            }
-            val url = chain.getArg(1) as? String
-            if (url == null || !shouldPatchPkBundle(url)) {
-                return@intercept chain.proceed()
-            }
-            val patched = fetchAndPatchJs(url)
-            if (patched == null) {
-                return@intercept chain.proceed()
-            }
-            logI("PK bundle intercepted+patched: $url")
-            patched
-        }
-    }
-
-    /** PK 相关前端 JS bundle（leo-web-oral-pk / leo-web-math-exercise / animation-oral 下的 .js）。 */
-    private fun shouldPatchPkBundle(path: String): Boolean {
-        val pkPage = path.contains("leo-web-oral-pk") ||
-            path.contains("leo-web-math-exercise") ||
-            path.contains("animation-oral")
-        val jsFile = path.endsWith(".js") || path.contains(".js?")
-        return pkPage && jsFile
-    }
-
-    /** fetch 原始 bundle → 7 patch → WebResourceResponse；未命中/失败返回 null（放行原加载）。 */
-    private fun fetchAndPatchJs(url: String): android.webkit.WebResourceResponse? {
-        return runCatching {
-            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-            conn.connectTimeout = 10_000
-            conn.readTimeout = 15_000
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 16; Build/QQ) AppleWebKit/537.36")
-            conn.instanceFollowRedirects = true
-            val bytes = conn.inputStream.use { it.readBytes() }
-            val text = String(bytes, Charsets.UTF_8)
-            val (newJs, cnt) = PkBundlePatcher.patch(text)
-            if (cnt > 0) {
-                logI("PK bundle fetched ${bytes.size}B patched x$cnt: $url")
-                android.webkit.WebResourceResponse(
-                    "application/javascript", "utf-8",
-                    java.io.ByteArrayInputStream(newJs.toByteArray(Charsets.UTF_8))
-                )
-            } else {
-                logI("PK bundle fetched but no patch match (version drift?): $url")
-                null
-            }
-        }.getOrElse {
-            logI("PK bundle fetch failed: ${it.message}")
-            null
-        }
-    }
-
     private fun hookJsLoadComplete() {
         val commonWebViewInterfaceClass = findClass(Classname.COMMON_WEB_VIEW_INTERFACE)
         commonWebViewInterfaceClass.findMethod("jsLoadComplete", String::class.java)
@@ -626,5 +558,67 @@ class WebViewHook(
         val invoker = XposedInit.self.getInvoker(loadUrl)
         invoker.setType(XposedInterface.Invoker.Type.ORIGIN)
         return invoker.invoke(thisObject, *args)
+    }
+
+    // ---------------------------------------------------------------------------
+    // 秒结算 7 patch 挂点（2026-08-30）：PK 页 JS bundle 走 WebView 网络栈，不经 Retrofit，
+    // 必须 hook WebViewClient.shouldInterceptRequest 拦截 .js 响应做文本 patch。
+    // ---------------------------------------------------------------------------
+    private fun hookShouldInterceptRequest() {
+        val webViewClientClass = runCatching { findClass("android.webkit.WebViewClient") }.getOrNull()
+            ?: return logI("WebViewHook: WebViewClient not found, skip intercept")
+        val method = webViewClientClass.methods.firstOrNull {
+            it.name == "shouldInterceptRequest" && it.parameterCount == 2 &&
+                it.parameterTypes[0] == android.webkit.WebView::class.java
+        } ?: return logI("WebViewHook: shouldInterceptRequest(WebView,String) not found, skip intercept")
+        method.intercept("webview_intercept_js") { chain ->
+            if (PK.mode != AutoAnswerMode.QUICK) {
+                return@intercept chain.proceed()
+            }
+            val url = chain.getArg(1) as? String
+            if (url == null || !shouldPatchPkBundle(url)) {
+                return@intercept chain.proceed()
+            }
+            val patched = fetchAndPatchJs(url)
+            if (patched == null) {
+                return@intercept chain.proceed()
+            }
+            logI("PK bundle intercepted+patched: $url")
+            patched
+        }
+    }
+
+    private fun shouldPatchPkBundle(path: String): Boolean {
+        val pkPage = path.contains("leo-web-oral-pk") ||
+            path.contains("leo-web-math-exercise") ||
+            path.contains("animation-oral")
+        val jsFile = path.endsWith(".js") || path.contains(".js?")
+        return pkPage && jsFile
+    }
+
+    private fun fetchAndPatchJs(url: String): android.webkit.WebResourceResponse? {
+        return runCatching {
+            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 15_000
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 16; Build/QQ) AppleWebKit/537.36")
+            conn.instanceFollowRedirects = true
+            val bytes = conn.inputStream.use { it.readBytes() }
+            val text = String(bytes, Charsets.UTF_8)
+            val (newJs, cnt) = PkBundlePatcher.patch(text)
+            if (cnt > 0) {
+                logI("PK bundle fetched ${bytes.size}B patched x$cnt: $url")
+                android.webkit.WebResourceResponse(
+                    "application/javascript", "utf-8",
+                    java.io.ByteArrayInputStream(newJs.toByteArray(Charsets.UTF_8))
+                )
+            } else {
+                logI("PK bundle fetched but no patch match (version drift?): $url")
+                null
+            }
+        }.getOrElse {
+            logI("PK bundle fetch failed: ${it.message}")
+            null
+        }
     }
 }
