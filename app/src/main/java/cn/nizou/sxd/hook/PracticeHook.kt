@@ -92,12 +92,12 @@ class PracticeHook(
 
         private val commitAnswer: Method? =
             presenterClass.findMethodBySignature(
-                arrayOf(String::class.java, List::class.java), null, "e"
+                arrayOf<Class<*>>(String::class.java, List::class.java), null, "e"
             )
 
         private val nextQuestion: Method? =
             presenterClass.findMethodBySignature(
-                arrayOf(Boolean::class.javaPrimitiveType, List::class.java), null, "d"
+                arrayOf<Class<*>>(Boolean::class.javaPrimitiveType!!, List::class.java), null, "d"
             )
 
         fun Any.startExercise() {

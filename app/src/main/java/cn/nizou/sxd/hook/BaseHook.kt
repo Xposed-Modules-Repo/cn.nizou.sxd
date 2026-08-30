@@ -38,10 +38,11 @@ abstract class BaseHook(
      *
      * 策略（高手方案：method 传参定位，见 skill 05 §8 版本适配方法论）：
      * 1. 名字只是「优先提示」——先找「名字 + 签名」都匹配的（keep 场景）；
-     * 2. 否则按签名唯一定位（`uniqueFallback=true` 时要求唯一，避免误 hook）；
-     * 3. 都不行返回 null，调用方可改用 [DexKitLocator] 兜底或按旧逻辑报错。
+     * 2. 否则按签名定位（参数个数一致 + 逐位 isAssignableFrom，接口可匹配实现类，如 List 匹配 ArrayList）；
+     * 3. 候选唯一才采用，避免误 hook；都失败返回 null，调用方可改用 [DexKitLocator] 兜底。
      *
-     * @param paramTypes 期望参数类型（原始类型用 `Boolean::class.javaPrimitiveType` 等）
+     * @param paramTypes 期望参数类型数组（原始类型用 `Boolean::class.javaPrimitiveType` 等；
+     *   注意显式 `arrayOf<Class<*>>(...)` 避免类型推断问题）
      * @param returnType 期望返回类型；为 null 不限定；传入接口时用 isAssignableFrom 匹配（如 List）
      * @param preferredName 旧版混淆名/原名，优先匹配（keep 场景双保险）
      */
@@ -51,7 +52,10 @@ abstract class BaseHook(
         preferredName: String? = null,
     ): Method? {
         val candidates = declaredMethods.filter { m ->
-            m.parameterTypes.contentEquals(paramTypes) &&
+            m.parameterTypes.size == paramTypes.size &&
+                paramTypes.indices.all { i ->
+                    paramTypes[i].isAssignableFrom(m.parameterTypes[i])
+                } &&
                 (returnType == null || returnType.isAssignableFrom(m.returnType))
         }
         if (preferredName != null) {
