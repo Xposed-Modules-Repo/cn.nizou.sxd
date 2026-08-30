@@ -454,7 +454,8 @@ class WebViewHook(
                 // 2026-08-29 真机 dump 实证（userAnswer="1" vs answer="<"）：**不**在此覆盖 userAnswer 为自定义答案
                 // （Simian 改答案由 SimianHook EncryptResult 处理前端数据层，提交层覆盖会导致服务端判错）；
                 // 也不改变 questions 结构（前端原生链推进后提交包是完整 N 题，兜底只修正答案字段）。
-                if (!Debug.debug && mode !in arrayOf(AutoAnswerMode.QUICK, AutoAnswerMode.STANDARD)) {
+                // 2026-08-30：自定义结算时间独立开关（PK.settleEnabled）开启时，任意 PK 模式也进入改包（只改 costTime）。
+                if (!Debug.debug && mode !in arrayOf(AutoAnswerMode.QUICK, AutoAnswerMode.STANDARD) && !PK.settleEnabled) {
                     return@intercept chain.proceed()
                 }
                 val bean = chain.getArg(0)
@@ -469,7 +470,7 @@ class WebViewHook(
                 if (!json.has("pkIdStr")) {
                     return@intercept chain.proceed()
                 }
-                if (!Debug.debug && mode !in arrayOf(AutoAnswerMode.QUICK, AutoAnswerMode.STANDARD)) {
+                if (!Debug.debug && mode !in arrayOf(AutoAnswerMode.QUICK, AutoAnswerMode.STANDARD) && !PK.settleEnabled) {
                     return@intercept chain.proceed()
                 }
                 runCatching {
@@ -506,8 +507,8 @@ class WebViewHook(
                         curTrueAnswer?.put("pathPoints", JSONArray().put(line))
                     }
                     val questionCnt = json.getInt("questionCnt")
-                    // 2026-08-29：结算时间覆盖扩展到 QUICK + STANDARD（用户要求覆盖面更广）
-                    if (mode == AutoAnswerMode.QUICK || mode == AutoAnswerMode.STANDARD) {
+                    // 2026-08-30：结算时间覆盖 QUICK/STANDARD，或自定义结算时间独立开关（任意模式）
+                    if (mode == AutoAnswerMode.QUICK || mode == AutoAnswerMode.STANDARD || PK.settleEnabled) {
                         val appropriateCostTime = appropriateCostTime.get()
                         // 2026-08-29：外挂检测点=答题时间 0.00s 触发封禁 → costTime 必须 >= 10ms(0.01s)。
                         // 自定义结算时间（秒转毫秒）低于 limit 时也保底，绝不出现 0.00s。

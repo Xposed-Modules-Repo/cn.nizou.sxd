@@ -1,8 +1,11 @@
 package cn.nizou.sxd.hook
 
 import cn.nizou.sxd.Classname
+import cn.nizou.sxd.entities.AutoAnswerMode
+import cn.nizou.sxd.util.PK
 import cn.nizou.sxd.util.Packet
 import cn.nizou.sxd.util.PacketTool
+import cn.nizou.sxd.util.PkBundlePatcher
 import cn.nizou.sxd.util.Practice
 import cn.nizou.sxd.util.SettingsPrefs
 import cn.nizou.sxd.util.UserInfoStore
@@ -120,7 +123,25 @@ class RetrofitHook(
         }
 
         // 3) proceed
-        val response = XposedHelpers.callMethod(chain, "proceed", req)
+        var response = XposedHelpers.callMethod(chain, "proceed", req)
+
+        // 3.5) PK 秒结算 7 patch（MITM 移植，见 util/PkBundlePatcher.kt）：
+        //      仅极速(QUICK)模式 + PK 相关 .js bundle 响应；对 body 文本做判题恒真/跳题0ms/
+        //      OCR回调恒真等替换（进页即改源码，绕开 Vue3 closure 拿不到组件实例的问题）。
+        runCatching {
+            if (response != null && PK.mode == AutoAnswerMode.QUICK && shouldPatchPkBundle(fullPath)) {
+                val body = XposedHelpers.callMethod(response, "body")
+                val text = XposedHelpers.callMethod(body, "string") as? String
+                if (text != null) {
+                    val (newJs, cnt) = PkBundlePatcher.patch(text)
+                    if (cnt > 0) {
+                        val newBody = rebuildResponseBody(response, newJs)
+                        XposedHelpers.setObjectField(response, "body", newBody)
+                        logI("PK bundle patched x$cnt: $fullPath")
+                    }
+                }
+            }
+        }.onFailure { logI("pk bundle patch failed: ${it.message}") }
 
         // 4) 响应抓包（capture 开启才用 peekBody 读，不消费真正的 body 流）
         if (Packet.capture) {
@@ -186,5 +207,33 @@ class RetrofitHook(
         val newBuilder = XposedHelpers.callMethod(request, "newBuilder")!!
         XposedHelpers.callMethod(newBuilder, "url", newUrl)
         return XposedHelpers.callMethod(newBuilder, "build")!!
+    }
+
+    /** PK 相关前端 JS bundle（leo-web-oral-pk / leo-web-math-exercise / animation-oral 下的 .js）。 */
+    private fun shouldPatchPkBundle(path: String): Boolean {
+        val pkPage = path.contains("leo-web-oral-pk") ||
+            path.contains("leo-web-math-exercise") ||
+            path.contains("animation-oral")
+        val jsFile = path.endsWith(".js") || path.contains(".js?")
+        return pkPage && jsFile
+    }
+
+    /**
+     * 反射重建 okhttp3.ResponseBody（避免模块直接依赖 okhttp 类型；兼容 3.x static create /
+     * 4.x Companion.create）。替换原 body 字段（private final，反射 setAccessible 可改）。
+     */
+    private fun rebuildResponseBody(response: Any, newText: String): Any {
+        val body = XposedHelpers.callMethod(response, "body")
+        val contentType = XposedHelpers.callMethod(body, "contentType")
+        val mediaTypeClass = Class.forName("okhttp3.MediaType")
+        val create = runCatching {
+            Class.forName("okhttp3.ResponseBody\$Companion")
+                .getMethod("create", mediaTypeClass, String::class.java)
+        }.getOrElse {
+            Class.forName("okhttp3.ResponseBody")
+                .getMethod("create", mediaTypeClass, String::class.java)
+        }
+        create.isAccessible = true
+        return create.invoke(null, contentType, newText)
     }
 }

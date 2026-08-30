@@ -116,6 +116,10 @@ object PK {
         get() = runCatching {
             modulePrefs.getString("pk_settle_time", "")!!.toInt()
         }.getOrDefault(10)
+
+    /** 自定义结算时间**独立开关**：开启后任意 PK 模式（含停用/自定义）提交都用 [settleTime] 作为 costTime，不再要求选秒结算。 */
+    val settleEnabled
+        get() = modulePrefs.getBoolean(moduleStringRes.KEY_PK_SETTLE_ENABLED, false)
     val pkCyclic
         get() = mode in arrayOf(
             AutoAnswerMode.STANDARD,
