@@ -28,7 +28,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import cn.nizou.sxd.HOST_PACKAGE_NAME
 import cn.nizou.sxd.MODULE_PREFS_NAME
-import cn.nizou.sxd.XposedInit
 import cn.nizou.sxd.util.currentApplication
 import cn.nizou.sxd.util.logI
 import cn.nizou.sxd.util.mainHandler
@@ -64,12 +63,11 @@ fun HookStatusCard(modifier: Modifier = Modifier) {
                 MODULE_PREFS_NAME, android.content.Context.MODE_PRIVATE
             )?.getBoolean("hook_active", false)
         }.getOrNull() ?: false
-        // 2) RemotePreferences（需框架注入本进程；模块本体未注入时 XposedInit.self 未初始化，
-        //    UninitializedPropertyAccessException 被 runCatching 兜住）
-        val remote = runCatching {
-            XposedInit.self.getRemotePreferences(MODULE_PREFS_NAME)
-                .getBoolean("hook_active", false)
-        }.getOrNull() ?: false
+        // 2) RemotePreferences（反射读取——不能直接引用 XposedInit.self：XposedInit 继承
+        //    XposedModule（compileOnly 不打包），模块本体独立进程没有该类，直接引用会在类加载
+        //    阶段抛 NoClassDefFoundError 且 try/catch 无法捕获 → 闪退；反射 forName 在 try 内
+        //    抛错可捕获，宿主进程正常读取）
+        val remote = readRemoteActive()
         // 3) root 直读宿主 shared_prefs（真实注入状态）——**仅在非宿主进程执行**：
         //    宿主进程 local 已足够（写入的就是宿主自己）；且 su 是阻塞调用，必须在后台线程，
         //    绝不能卡 Compose 主线程（否则 ANR/闪退）。
@@ -190,5 +188,28 @@ private fun readHostHookActive(): Boolean {
         val text = p.inputStream.bufferedReader().readText()
         p.destroy()
         text.contains("name=\"hook_active\"") && text.contains("value=\"true\"")
+    }.getOrDefault(false)
+}
+
+/**
+ * 反射读取 RemotePreferences 的 hook_active。
+ *
+ * ⚠️ 不能直接引用 `XposedInit.self`：`XposedInit` 继承 `io.github.libxposed.api.XposedModule`
+ * （compileOnly 依赖，不打包进 APK）。模块本体是独立 App，进程里没有 XposedModule 类——
+ * 字节码一旦直接引用 XposedInit，**类加载阶段**就抛 `NoClassDefFoundError`，try/catch 无法捕获，
+ * 表现为模块本体打开即闪退（真机 1.7.13/1.7.14 已复现）。改用反射 `Class.forName`：
+ * 宿主进程（框架注入，XposedModule 存在）正常读取；模块本体进程 forName 抛错在 try 内被捕获 → false。
+ */
+private fun readRemoteActive(): Boolean {
+    return runCatching {
+        val companion = Class.forName("cn.nizou.sxd.XposedInit\$Companion")
+        val self = companion.getField("self").get(null) ?: return false
+        val m = self.javaClass.methods.first {
+            it.name == "getRemotePreferences" && it.parameterCount == 1
+        }
+        m.isAccessible = true
+        val prefs = m.invoke(self, MODULE_PREFS_NAME) as? android.content.SharedPreferences
+            ?: return false
+        prefs.getBoolean("hook_active", false)
     }.getOrDefault(false)
 }

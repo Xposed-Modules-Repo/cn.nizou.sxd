@@ -1,19 +1,35 @@
 package cn.nizou.sxd.util
 
 import android.util.Log
-import cn.nizou.sxd.XposedInit
 
 private const val TAG = "AutoOral"
 
 fun logI(vararg infos: Any) {
+    // 反射拿 XposedInit.self：XposedInit 继承 XposedModule（compileOnly 不打包），模块本体
+    // 独立进程没有该类，直接引用会在类加载阶段抛 NoClassDefFoundError（Error，普通 catch 不住）
+    // → 模块本体任何 logI 调用都会闪退。反射 forName 抛错被 catch Throwable 兜住 → null。
     val self = try {
-        XposedInit.self
-    } catch (_: UninitializedPropertyAccessException) {
+        val companion = Class.forName("cn.nizou.sxd.XposedInit\$Companion")
+        companion.getField("self").get(null)
+    } catch (_: Throwable) {
         null
     }
     infos.forEach {
         val throwable = it as? Throwable
-        self?.log(Log.INFO, TAG, "$TAG >>> $it", throwable)
+        if (self != null) {
+            try {
+                val logMethod = self.javaClass.getMethod(
+                    "log",
+                    Int::class.javaPrimitiveType,
+                    String::class.java,
+                    String::class.java,
+                    Throwable::class.java
+                )
+                logMethod.invoke(self, Log.INFO, TAG, "$TAG >>> $it", throwable)
+            } catch (_: Throwable) {
+                // 框架日志失败不阻塞（fallback 到 Log.e）
+            }
+        }
         Log.e(TAG, it.toString())
         if (throwable != null) {
             Log.e(TAG, "", throwable)
