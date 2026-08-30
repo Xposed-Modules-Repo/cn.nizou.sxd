@@ -207,6 +207,10 @@ class DampedDragAnimation(
                 animate(
                     initialValue = valueState,
                     targetValue = target,
+                    // ★ 拖动末速度作为初速度（velocityState 单位 tab/ms → *1000 转 tab/s）：
+                    // wekit 用 Animatable.animateTo 会继承当前速度，弹簧带速度冲过头再回弹 = q弹；
+                    // 之前未传 initialVelocity（默认 0，静止起步）所以弹不起来。
+                    initialVelocity = velocityState * 1000f,
                     animationSpec = valueAnimationSpec,
                 ) { v, _ ->
                     valueState = v
