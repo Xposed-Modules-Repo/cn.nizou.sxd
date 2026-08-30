@@ -7,6 +7,7 @@ import android.util.Log
 import cn.nizou.sxd.HOST_PACKAGE_NAME
 import cn.nizou.sxd.MODULE_PREFS_NAME
 import cn.nizou.sxd.hook.BaseHook
+import cn.nizou.sxd.util.ActivityProxy
 import cn.nizou.sxd.util.DexKitLocator
 import cn.nizou.sxd.util.HookStatus
 import cn.nizou.sxd.util.XposedHelpers
@@ -94,6 +95,19 @@ class XposedInit : XposedModule() {
                 val r = chain.proceed()
                 try {
                     BaseHook.startHook(this, appClassLoader)
+                    // ActivityProxy 借壳引擎：让模块 HostSettingsActivity 寄生宿主进程运行
+                    // （真 Activity 转场动画/预测返回）。必须在宿主 Application.attach 后、
+                    // 任何模块 Activity 启动前初始化；失败不影响其余 hook。
+                    runCatching {
+                        val app = chain.thisObject as? android.app.Application
+                        if (app != null) {
+                            ActivityProxy.init(
+                                appContext = app,
+                                moduleCl = XposedInit::class.java.classLoader!!,
+                                hostCl = appClassLoader,
+                            )
+                        }
+                    }.onFailure { Log.e("AutoOral", "ActivityProxy init failed", it) }
                     // DexKit 索引初始化（版本适配兜底：类名/方法名混淆时按签名+字符串引用定位，
                     // 见 skill 05 §8）。DexKit 2.0 需要宿主 APK 路径；首次建索引走后台线程，
                     // 不阻塞 hook；失败不影响主流程。

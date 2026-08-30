@@ -16,6 +16,7 @@ import cn.nizou.sxd.KEY_START_SETTINGS
 import cn.nizou.sxd.api.LegacyApiService
 import cn.nizou.sxd.api.OralApiService
 import cn.nizou.sxd.ui.host.HostComposePanel
+import cn.nizou.sxd.ui.host.HostSettingsActivity
 import cn.nizou.sxd.util.HostResultBus
 import cn.nizou.sxd.util.XposedHelpers
 import cn.nizou.sxd.util.logI
@@ -164,6 +165,15 @@ class SettingHook(
 
     private fun showSettingsPanel(context: Context) {
         if (context is Activity) {
+            // 优先：借壳启动模块 HostSettingsActivity 寄生宿主进程（真 Activity 转场动画/预测返回，
+            // 2026-08-31 用户决策对齐 wekit ActivityProxy）。Intent component 是模块类名，ActivityProxy
+            // 的 IActivityManager hook 会自动换壳成宿主 SplashActivity 走系统栈。
+            runCatching {
+                val intent = android.content.Intent(context, HostSettingsActivity::class.java)
+                context.startActivity(intent)
+                return
+            }.onFailure { logI("showSettings via ActivityProxy failed: ${it.message}") }
+            // 回退：ComponentDialog（ActivityProxy 未初始化或宿主不支持时保底）
             HostComposePanel.showSettings(context)
         }
     }
@@ -197,7 +207,7 @@ class SettingHook(
             itemConstructor.newInstance(activity) as View
         }
         return buildSectionItem(item, labelId, "老挂戏老叟设置") {
-            HostComposePanel.showSettings(activity)
+            showSettingsPanel(activity)
         }
     }
 

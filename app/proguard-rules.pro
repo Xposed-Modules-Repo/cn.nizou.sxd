@@ -22,6 +22,12 @@
 
 -keep class cn.nizou.sxd.XposedInit
 
+# --- ActivityProxy 借壳引擎（HostSettingsActivity 反射实例化 + Instrumentation 子类） ---
+-keepnames class cn.nizou.sxd.ui.host.HostSettingsActivity
+-keep class cn.nizou.sxd.ui.host.HostSettingsActivity { public <init>(); }
+-keep class cn.nizou.sxd.util.ActivityProxy { *; }
+-keep class cn.nizou.sxd.util.ActivityProxy$* { *; }
+
 # --- libxposed API 102 官方规则 ---
 -dontwarn io.github.libxposed.annotation.**
 -adaptresourcefilecontents META-INF/xposed/java_init.list

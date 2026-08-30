@@ -39,6 +39,15 @@
             android:exported="true"
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- 模块设置 Activity（借壳寄生宿主进程，对齐 WeKit SettingsActivity）：
+             宿主进程经 ActivityProxy 把本类当宿主 SplashActivity 启动；系统侧按模块 manifest
+             校验 ActivityInfo（ActivityProxy 的 PackageManager hook 伪造为宿主包名），
+             theme 用模块主题。本类禁止在模块独立进程启动。 -->
+        <activity
+            android:name=".ui.host.HostSettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.AutoOralCalculation" />
     </application>
 
 </manifest>

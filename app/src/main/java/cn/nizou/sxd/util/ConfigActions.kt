@@ -32,8 +32,16 @@ object ConfigActions {
 
     /** 入口：导出配置（系统文件选择器选保存位置）。 */
     fun export(context: Context) {
+        val activity = findActivity(context)
         if (ConfigTransfer.isHostProcess()) {
-            exportInHostProcess(context)
+            // 借壳设置面板（HostSettingsActivity 是宿主进程内 ComponentActivity，有
+            // ActivityResultRegistry）→ 用 registerForActivityResult（结果直回面板，不 finish）；
+            // 旧 ComponentDialog 面板 → 宿主 SettingsActivity.startActivityForResult + HostResultBus。
+            if (activity is ComponentActivity) {
+                runExport(activity, finishOnDone = false)
+            } else {
+                exportInHostProcess(context)
+            }
         } else {
             ConfigTransferActivity.launchExport(context)
         }
@@ -41,8 +49,13 @@ object ConfigActions {
 
     /** 入口：导入配置（系统文件选择器选 JSON 文件）。 */
     fun importFromDocument(context: Context) {
+        val activity = findActivity(context)
         if (ConfigTransfer.isHostProcess()) {
-            importInHostProcess(context)
+            if (activity is ComponentActivity) {
+                runImport(activity, finishOnDone = false)
+            } else {
+                importInHostProcess(context)
+            }
         } else {
             ConfigTransferActivity.launchImport(context)
         }
@@ -122,13 +135,14 @@ object ConfigActions {
     /**
      * 在 [ConfigTransferActivity]（模块进程，onCreate 内调用）执行导出流程：
      * 注册 CreateDocument launcher → 用户选位置 → 后台导出 JSON → toast → finish。
+     * 借壳设置面板（宿主进程 ComponentActivity）也走本方法，但 finishOnDone=false 保持面板打开。
      */
-    fun runExport(activity: ComponentActivity) {
+    fun runExport(activity: ComponentActivity, finishOnDone: Boolean = true) {
         val exportLauncher = activity.registerForActivityResult(
             ActivityResultContracts.CreateDocument("application/json"),
         ) { uri ->
             if (uri == null) {
-                activity.finish()
+                if (finishOnDone) activity.finish()
                 return@registerForActivityResult
             }
             activity.lifecycleScope.launch(Dispatchers.IO) {
@@ -145,7 +159,7 @@ object ConfigActions {
                         activity,
                         if (result.isSuccess) "配置已导出" else "导出失败：${errorMessage(result)}",
                     )
-                    activity.finish()
+                    if (finishOnDone) activity.finish()
                 }
             }
         }
@@ -155,13 +169,14 @@ object ConfigActions {
     /**
      * 在 [ConfigTransferActivity]（模块进程，onCreate 内调用）执行导入流程：
      * 注册 OpenDocument launcher → 用户选文件 → 后台全量覆盖宿主 prefs → toast → finish。
+     * 借壳设置面板（宿主进程 ComponentActivity）也走本方法，但 finishOnDone=false 保持面板打开。
      */
-    fun runImport(activity: ComponentActivity) {
+    fun runImport(activity: ComponentActivity, finishOnDone: Boolean = true) {
         val importLauncher = activity.registerForActivityResult(
             ActivityResultContracts.OpenDocument(),
         ) { uri ->
             if (uri == null) {
-                activity.finish()
+                if (finishOnDone) activity.finish()
                 return@registerForActivityResult
             }
             activity.lifecycleScope.launch(Dispatchers.IO) {
@@ -178,7 +193,7 @@ object ConfigActions {
                         activity,
                         if (result.isSuccess) "导入成功，重启小猿口算后生效" else "导入失败：${errorMessage(result)}",
                     )
-                    activity.finish()
+                    if (finishOnDone) activity.finish()
                 }
             }
         }
