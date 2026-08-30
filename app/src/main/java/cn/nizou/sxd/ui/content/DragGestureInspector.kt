@@ -25,6 +25,7 @@ suspend fun PointerInputScope.inspectDragGestures(
     onDragStart: (down: PointerInputChange) -> Unit = {},
     onDragEnd: (change: PointerInputChange) -> Unit = {},
     onDragCancel: () -> Unit = {},
+    consumeOnDrag: Boolean = false,
     onDrag: (change: PointerInputChange, dragAmount: Offset) -> Unit
 ) {
     awaitEachGesture {
@@ -37,7 +38,12 @@ suspend fun PointerInputScope.inspectDragGestures(
         val upEvent =
             drag(
                 pointerId = initialDown.id,
-                onDrag = { onDrag(it, it.positionChange()) }
+                onDrag = { change ->
+                    onDrag(change, change.positionChange())
+                    // 仅 DampedDragAnimation（底栏 tab 拖动）消费，阻止下层 HorizontalPager
+                    // scrollable 抢走水平手势导致页面乱动；InteractiveHighlight 高光不消费。
+                    if (consumeOnDrag) change.consume()
+                }
             )
         if (upEvent == null) {
             onDragCancel()
