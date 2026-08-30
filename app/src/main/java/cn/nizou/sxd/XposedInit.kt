@@ -82,11 +82,15 @@ class XposedInit : XposedModule() {
                 try {
                     BaseHook.startHook(this, appClassLoader)
                     // DexKit 索引初始化（版本适配兜底：类名/方法名混淆时按签名+字符串引用定位，
-                    // 见 skill 05 §8）。首次建索引走后台线程，不阻塞 hook；失败不影响主流程。
+                    // 见 skill 05 §8）。DexKit 2.0 需要宿主 APK 路径；首次建索引走后台线程，
+                    // 不阻塞 hook；失败不影响主流程。
                     kotlin.concurrent.thread {
                         runCatching {
-                            if (DexKitLocator.init(appClassLoader)) {
-                                Log.i("AutoOral", "DexKit ready")
+                            val ctx = chain.thisObject as? android.content.Context
+                            val apkPath = ctx?.packageManager
+                                ?.getApplicationInfo(HOST_PACKAGE_NAME, 0)?.sourceDir
+                            if (apkPath != null && DexKitLocator.init(apkPath)) {
+                                Log.i("AutoOral", "DexKit ready: $apkPath")
                             }
                         }.onFailure { Log.e("AutoOral", "DexKit init failed", it) }
                     }

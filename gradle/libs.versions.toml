@@ -17,7 +17,7 @@ materialkolor = "5.0.0"
 # kotlinx-serialization —— miuix-nav rememberNavBackStack saver 需要 @Serializable 路由（wekit 同款 1.11.0）
 serialization = "1.11.0"
 # DexKit —— 版本适配：按方法参数类型/字符串引用在 dex 中定位混淆类与方法（高手方案，多版本 hook 兜底）
-dexkit = "2.5.1"
+dexkit = "2.0.6"
 
 [libraries]
 libxposed-api = { module = "io.github.libxposed:api", version.ref = "libxposed" }
@@ -42,8 +42,8 @@ composablehorizons-material-symbols-filled = { module = "com.composables:icons-m
 materialkolor = { module = "com.materialkolor:material-kolor", version.ref = "materialkolor" }
 # --- kotlinx-serialization（@Serializable 路由，miuix-nav saver 用） ---
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
-# --- DexKit（版本适配：按传参/字符串引用定位混淆类与方法） ---
-dexkit = { module = "io.github.lonelyxmas:dexkit", version.ref = "dexkit" }
+# --- DexKit（版本适配：按传参/字符串引用定位混淆类与方法；2.0 起坐标 org.luckypray） ---
+dexkit = { module = "org.luckypray:dexkit", version.ref = "dexkit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

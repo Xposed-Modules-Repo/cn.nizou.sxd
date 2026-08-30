@@ -7,14 +7,19 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * DexKit 定位器（版本适配兜底层，高手方案——见 skill 05 §8）。
  *
- * 场景：类名被混淆（Classname 常量失效）或方法签名不唯一时，用 DexKit 在宿主 dex 中
- * 按「方法参数类型 / 返回类型 / 字符串引用」模糊搜索类与方法，替代每个版本手工逆向硬编码。
+ * DexKit 2.0（org.luckypray:dexkit）：C++ 实现的 dex 运行时解析库，遍历/建索引极快；
+ * 按「方法参数类型 / 返回类型 / 方法内字符串引用」在宿主 dex 中模糊搜索类，替代每个版本
+ * 手工逆向硬编码混淆类/方法名。
+ *
+ * 场景：
+ * - 类名被混淆（Classname 常量失效）→ 用本类按方法特征搜类名；
+ * - 方法签名不唯一（多个同签名方法）→ 用 usingStrings（URL 路径/字段名等）缩小。
  *
  * 注意：
- * - DexKit 遍历 dex 索引很快（毫秒~百毫秒级），但**首次搜索会建索引**，必须在后台线程跑，
- *   结果缓存到 [cache]，后续同步命中。
- * - `searchMethod` 返回形如 `Lcom/xxx/a;->e(Ljava/lang/String;Ljava/util/List;)V` 的
- *   方法描述符集合，取第一个的类名即目标类。
+ * - [init] 需要**宿主 APK 路径**（DexKit 2.0 `create(apkPath)`，不再吃 classLoader）；
+ *   首次建索引走后台线程，结果缓存到 [cache]，后续同步命中。
+ * - native 库：`System.loadLibrary("dexkit")` 在 [init] 内加载（AAR 已随 APK 打包 libdexkit.so）。
+ * - 生命周期：宿主进程常驻，进程结束由系统回收；[close] 可选。
  */
 object DexKitLocator {
 
@@ -23,13 +28,17 @@ object DexKitLocator {
     @Volatile
     private var bridge: DexKitBridge? = null
 
-    /** 用宿主 classLoader 初始化（幂等；线程安全）。失败返回 null 不抛。 */
-    fun init(classLoader: ClassLoader): Boolean {
+    /** 用宿主 APK 路径初始化（幂等；线程安全）。失败返回 false 不抛。 */
+    fun init(apkPath: String): Boolean {
         if (bridge != null) return true
         return runCatching {
-            val b = DexKitBridge.create(classLoader) ?: return false
+            // native 库必须先加载（DexKitBridge.create 内部依赖 JNI）
+            System.loadLibrary("dexkit")
+            val b = DexKitBridge.create(apkPath) ?: return false
             bridge = b
             true
+        }.onFailure {
+            logI("DexKitLocator init failed: ${it.message}")
         }.getOrDefault(false)
     }
 
@@ -41,16 +50,16 @@ object DexKitLocator {
     }
 
     /**
-     * 按方法签名特征搜索类名集合（缓存命中直接返回）。
+     * 按「方法签名特征」搜索类名集合（缓存命中直接返回）。
      *
-     * @param paramTypeNames 参数类型名数组（dex 描述符简写，如 "java.lang.String"、"java.util.List"）；
-     *   传空数组表示不限参数（需配合 [returnTypeName]/[usingStrings] 缩小范围）
-     * @param returnTypeName 返回类型名（可为 null）
-     * @param usingStrings 方法体内引用的字符串（如 URL 路径、字段名），全部命中才算
+     * @param paramTypeNames 参数类型名数组（如 "java.lang.String"、"java.util.List"）；
+     *   元素传 null 表示该位参数任意（隐含参数个数），传空数组表示不限参数
+     * @param returnTypeName 返回类型名（可为 null；如 "void"、"java.util.List"）
+     * @param usingStrings 方法体内引用的字符串（URL 路径、字段名等），全部命中才算
      * @return 匹配类名集合（如 "com.fenbi.android.leo.exercise.math.quick.QuickExercisePresenter"）
      */
     fun findClassNamesByMethod(
-        paramTypeNames: List<String>,
+        paramTypeNames: List<String?>,
         returnTypeName: String? = null,
         usingStrings: List<String> = emptyList(),
     ): Set<String> {
@@ -59,38 +68,36 @@ object DexKitLocator {
 
         val b = bridge ?: return emptySet()
         return runCatching {
-            val methods = b.searchMethod {
+            val classes = b.findClass {
                 matcher {
-                    if (paramTypeNames.isNotEmpty()) {
-                        paramTypes = paramTypeNames.toTypedArray()
-                    }
-                    if (returnTypeName != null) {
-                        returnType = returnTypeName
-                    }
-                    if (usingStrings.isNotEmpty()) {
-                        usingStrings(usingStrings) {
-                            stringMatchType = StringMatchType.EQUALS
+                    methods {
+                        add {
+                            if (paramTypeNames.isNotEmpty()) {
+                                paramTypes(*paramTypeNames.toTypedArray())
+                            }
+                            if (returnTypeName != null) {
+                                returnType = returnTypeName
+                            }
+                            if (usingStrings.isNotEmpty()) {
+                                usingStrings(usingStrings, StringMatchType.Equals)
+                            }
                         }
                     }
                 }
             }
-            val classNames = methods.mapNotNull { desc ->
-                // desc 形如 "Lcom/xxx/a;->e(Ljava/lang/String;...)V" → 取类名
-                desc.substringAfter("L").substringBefore(";")
-                    .replace('/', '.')
-            }.toSet()
-            cache[key] = classNames
-            logI("DexKitLocator: key=$key → ${classNames.size} classes, first=${classNames.firstOrNull()}")
-            classNames
+            val names = classes.map { it.name }.toSet()
+            cache[key] = names
+            logI("DexKitLocator: key=$key → ${names.size} classes, first=${names.firstOrNull()}")
+            names
         }.getOrElse {
             logI("DexKitLocator search failed: ${it.message}")
             emptySet()
         }
     }
 
-    /** 便捷：参数类型名数组直接定位唯一类名；不唯一/失败返回 null。 */
+    /** 便捷：定位唯一类名；不唯一/失败返回 null。 */
     fun findClassName(
-        paramTypeNames: List<String>,
+        paramTypeNames: List<String?>,
         returnTypeName: String? = null,
         usingStrings: List<String> = emptyList(),
     ): String? {
