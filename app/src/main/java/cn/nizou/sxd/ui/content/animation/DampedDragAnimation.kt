@@ -46,8 +46,10 @@ class DampedDragAnimation(
     val onLongPress: DampedDragAnimation.() -> Boolean = { false },
 ) {
 
+    // 回位弹簧：阻尼 <1（欠阻尼）产生轻微过冲 = 「q弹」手感（wekit 原版 1f 临界阻尼不过冲）。
+    // 拖动跟手走同步 snapToValue，不受此 spec 影响。
     private val valueAnimationSpec =
-        spring(1f, 1000f, visibilityThreshold)
+        spring(dampingRatio = 0.7f, stiffness = 500f, visibilityThreshold = visibilityThreshold)
     private val pressProgressAnimationSpec =
         spring(1f, 1000f, 0.001f)
     private val scaleXAnimationSpec =
