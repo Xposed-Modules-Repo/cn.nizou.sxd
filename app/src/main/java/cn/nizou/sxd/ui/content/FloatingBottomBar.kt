@@ -209,8 +209,7 @@ fun <T> FloatingBottomBar(
     onSelectedTabTap: ((index: Int) -> Unit)? = null,
     onTabLongPress: ((index: Int) -> Boolean)? = null,
     liquidGlassBlurRadius: Dp = 4.dp,
-    // 陀螺仪光效默认关闭（用户要求，设置页可开）：开启后指示器高光随设备倾斜旋转
-    dynamicGravityHighlight: Boolean = false,
+    dynamicGravityHighlight: Boolean = true,
 ) {
     val isInDark = isSystemInDarkTheme()
     val pillShape = remember { CircleShape }
@@ -274,7 +273,7 @@ fun <T> FloatingBottomBar(
             onDragStarted = { position ->
                 gestureIndices[0] = currentIndex
                 gestureIndices[1] = indexAt(position.x)
-                snapToValue(gestureIndices[1].toFloat())
+                updateValue(gestureIndices[1].toFloat())
             },
             onDragStopped = {
                 val targetIndex = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
@@ -282,22 +281,21 @@ fun <T> FloatingBottomBar(
                     currentIndex = targetIndex
                     onSelectedUpdated(targetIndex)
                 }
-                animateToValue(targetIndex.toFloat())
+                updateValue(targetIndex.toFloat())
                 animationScope.launch {
                     offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f))
                 }
             },
             onDragCancelled = {
                 currentIndex = gestureIndices[0]
-                snapToValue(gestureIndices[0].toFloat())
+                updateValue(gestureIndices[0].toFloat())
                 animationScope.launch {
                     offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f))
                 }
             },
             onDrag = { _, dragAmount ->
                 if (tabWidthPx > 0f && dragAmount.x != 0f) {
-                    // 同步跟手（零延迟，无 spring 追赶），松手才 spring 回位
-                    snapToValue(
+                    updateValue(
                         (targetValue + dragAmount.x / tabWidthPx * if (isLtr) 1f else -1f)
                             .fastCoerceIn(0f, (tabsCount - 1).toFloat())
                     )
