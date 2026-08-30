@@ -274,7 +274,7 @@ fun <T> FloatingBottomBar(
             onDragStarted = { position ->
                 gestureIndices[0] = currentIndex
                 gestureIndices[1] = indexAt(position.x)
-                snapToValue(gestureIndices[1].toFloat())
+                updateValue(gestureIndices[1].toFloat())
             },
             onDragStopped = {
                 val targetIndex = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
@@ -296,8 +296,7 @@ fun <T> FloatingBottomBar(
             },
             onDrag = { _, dragAmount ->
                 if (tabWidthPx > 0f && dragAmount.x != 0f) {
-                    // 跟手直接设置（snap），避免每次移动重启 spring 导致「越拖越慢」
-                    snapToValue(
+                    updateValue(
                         (targetValue + dragAmount.x / tabWidthPx * if (isLtr) 1f else -1f)
                             .fastCoerceIn(0f, (tabsCount - 1).toFloat())
                     )
