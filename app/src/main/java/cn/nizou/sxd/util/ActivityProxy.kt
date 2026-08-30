@@ -346,7 +346,7 @@ object ActivityProxy {
         @SuppressLint("PrivateApi", "DiscouragedPrivateApi")
         private fun updateLaunchingActivityIntent(transaction: Any, intent: Intent) {
             val token = transaction.javaClass.getMethod("getActivityToken").invoke(transaction) as IBinder
-            val activityThread = ActivityProxy.currentActivityThread()
+            val activityThread = ActivityProxy.currentActivityThread() ?: return
             val record = activityThread.javaClass
                 .getMethod("getLaunchingActivity", IBinder::class.java)
                 .invoke(activityThread, token) ?: return
@@ -427,7 +427,7 @@ object ActivityProxy {
         override fun waitForIdleSync() = base.waitForIdleSync()
         override fun runOnMainSync(runner: Runnable?) = base.runOnMainSync(runner)
         override fun startActivitySync(intent: Intent): Activity? = base.startActivitySync(intent)
-        override fun startActivitySync(intent: Intent, options: Bundle?): Activity? =
+        override fun startActivitySync(intent: Intent, options: Bundle?): Activity =
             base.startActivitySync(intent, options)
         override fun addMonitor(monitor: Instrumentation.ActivityMonitor?) =
             base.addMonitor(monitor)
