@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.nizou.sxd.BuildConfig
+import cn.nizou.sxd.XposedInit
 import cn.nizou.sxd.ui.animation.predictiveback.weKitNavTransition
 import cn.nizou.sxd.ui.components.BaseWidget
 import cn.nizou.sxd.ui.components.HookStatusCard
@@ -342,14 +343,9 @@ private fun deviceInfoEntries(): List<HomeInfoEntry> {
         }.getOrNull()
     }
     val frameworkInfo = remember {
-        // 反射读取 XposedInit（模块本体独立进程没有 XposedModule 类，直接引用会在类加载阶段
-        // NoClassDefFoundError 闪退；宿主进程反射正常返回框架信息，模块本体返回 null → 显示独立打开）
         runCatching {
-            val companion = Class.forName("cn.nizou.sxd.XposedInit\$Companion")
-            val self = companion.getField("self").get(null) ?: return@runCatching null
-            val api = self.javaClass.getMethod("getApiVersion").invoke(self)
-            val fw = self.javaClass.getMethod("getFrameworkName").invoke(self)
-            "API $api · $fw"
+            val self = XposedInit.self
+            "API ${self.apiVersion} · ${self.frameworkName}"
         }.getOrNull()
     }
     return listOf(
