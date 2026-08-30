@@ -117,8 +117,18 @@ object ConfigTransfer {
         @Suppress("UNCHECKED_CAST")
         prefs.all as Map<String, Any>
     } else {
-        val xml = su("cat $HOST_PREFS_FILE", timeoutMs = 8000)
-            ?: throw IllegalStateException("root 不可用或读不到宿主配置文件（需要 root 环境）")
+        val res = su("cat $HOST_PREFS_FILE")
+        val xml = res.output
+        if (xml == null) {
+            val err = res.error ?: "未知错误"
+            throw IllegalStateException(
+                if (err.contains("No such file") || err.contains("not found")) {
+                    "宿主配置文件不存在（请先打开一次小猿口算，让模块写入配置）"
+                } else {
+                    "无法读取宿主配置：$err"
+                }
+            )
+        }
         parsePrefsXml(xml)
     }
 
@@ -200,17 +210,18 @@ object ConfigTransfer {
      * 3) 文件原本不存在时兜底 chown 到宿主 uid。
      */
     private fun writeHostPrefsViaRoot(map: Map<String, Any>): String? {
-        val existed = su("cat $HOST_PREFS_FILE", timeoutMs = 8000) != null
+        val existed = su("cat $HOST_PREFS_FILE").output != null
         // force-stop 宿主，避免其 SharedPreferences 内存缓存稍后落盘覆盖新文件
-        su("am force-stop $HOST_PACKAGE_NAME", timeoutMs = 8000)
+        su("am force-stop $HOST_PACKAGE_NAME")
         val xml = buildPrefsXml(map)
-        if (!suWrite(HOST_PREFS_FILE, xml)) {
-            return "写入宿主配置文件失败（root 不可用？）"
+        val write = suWrite(HOST_PREFS_FILE, xml)
+        if (write.output == null) {
+            return "写入宿主配置文件失败：${write.error ?: "root 不可用"}"
         }
         if (!existed) {
             val uid = hostUid()
             if (uid != null) {
-                su("chown $uid:$uid $HOST_PREFS_FILE", timeoutMs = 8000)
+                su("chown $uid:$uid $HOST_PREFS_FILE")
             } else {
                 logI("ConfigTransfer: file was missing and host uid not resolved; " +
                     "SELinux/owner may need manual fix")
@@ -266,33 +277,49 @@ object ConfigTransfer {
 
     // ------------------------------------------------------------------ root 执行
 
-    /** 执行 `su -c <command>` 并返回 stdout（失败/超时返回 null）。 */
-    private fun su(command: String, timeoutMs: Long = 8000): String? = try {
+    /** su 执行结果：成功时 [output] 非空；失败时 [error] 含面向用户的排查信息。 */
+    private class SuResult(val output: String?, val error: String?)
+
+    /**
+     * 执行 `su -c <command>`。超时放宽到 15s：Magisk/KernelSU 首次授权会弹窗，
+     * 8s 常不够用户点击允许。失败时把 stderr（redirectErrorStream 合并）带回，供
+     * toast 区分「文件不存在 / su 未授权 / 命令超时」，不再笼统报「无 root 权限」。
+     */
+    private fun su(command: String, timeoutMs: Long = 15000): SuResult = try {
         val p = ProcessBuilder("su", "-c", command).redirectErrorStream(true).start()
         if (!p.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
             p.destroy()
-            null
+            SuResult(null, "su 命令超时（${timeoutMs / 1000}s）——首次调用需在授权弹窗中允许，请重试")
         } else {
             val out = p.inputStream.bufferedReader().use { it.readText() }
             p.destroy()
-            if (p.exitValue() != 0) null else out
+            if (p.exitValue() == 0) SuResult(out, null)
+            else SuResult(null, out.trim().ifEmpty { "su 退出码 ${p.exitValue()}" })
         }
     } catch (e: Exception) {
-        null
+        SuResult(null, "su 执行异常：${e.message ?: e.javaClass.simpleName}")
     }
 
     /** `su -c "cat > 文件"`，内容走 stdin。 */
-    private fun suWrite(file: String, content: String): Boolean = runCatching {
+    private fun suWrite(file: String, content: String): SuResult = try {
         val p = ProcessBuilder("su", "-c", "cat > $file").redirectErrorStream(true).start()
         p.outputStream.writer().use { it.write(content) }
-        val ok = p.waitFor(8000, TimeUnit.MILLISECONDS) && p.exitValue() == 0
-        p.destroy()
-        ok
-    }.getOrDefault(false)
+        if (!p.waitFor(15000, TimeUnit.MILLISECONDS)) {
+            p.destroy()
+            SuResult(null, "su 写入超时（15s）")
+        } else {
+            val err = p.inputStream.bufferedReader().use { it.readText() }
+            p.destroy()
+            if (p.exitValue() == 0) SuResult("ok", null)
+            else SuResult(null, err.trim().ifEmpty { "su 退出码 ${p.exitValue()}" })
+        }
+    } catch (e: Exception) {
+        SuResult(null, "su 写入异常：${e.message ?: e.javaClass.simpleName}")
+    }
 
     /** 宿主应用 uid（dumpsys package 的 userId=），失败返回 null。 */
     private fun hostUid(): String? {
-        val dump = su("dumpsys package $HOST_PACKAGE_NAME", timeoutMs = 8000) ?: return null
+        val dump = su("dumpsys package $HOST_PACKAGE_NAME").output ?: return null
         val m = Regex("""userId=(\d+)""").find(dump) ?: return null
         return m.groupValues[1]
     }
