@@ -10,6 +10,8 @@
         <intent>
             <action android:name="android.intent.action.MAIN" />
         </intent>
+        <!-- 模块本体（独立进程）查宿主：getLaunchIntentForPackage / getPackageInfo 需包可见性 -->
+        <package android:name="com.fenbi.android.leo" />
     </queries>
 
     <application

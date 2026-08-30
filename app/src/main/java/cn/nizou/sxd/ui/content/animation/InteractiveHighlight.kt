@@ -20,17 +20,14 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ShaderBrush
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.util.fastCoerceIn
 import cn.nizou.sxd.ui.content.inspectDragGestures
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import org.intellij.lang.annotations.Language
 
-@SuppressLint("NewApi")
 class InteractiveHighlight(
     val animationScope: CoroutineScope,
     val position: (size: Size, offset: Offset) -> Offset = { _, offset -> offset }
@@ -49,23 +46,6 @@ class InteractiveHighlight(
     private var startPosition = Offset.Zero
     val offset: Offset get() = positionAnimation.value - startPosition
 
-    @Language("AGSL")
-    private val shader =
-        RuntimeShader(
-            """
-uniform float2 size;
-layout(color) uniform half4 color;
-uniform float radius;
-uniform float2 position;
-
-half4 main(float2 coord) {
-    float dist = distance(coord, position);
-    float intensity = smoothstep(radius, radius * 0.5, dist);
-    return color * intensity;
-}
-"""
-        )
-
     val modifier: Modifier =
         Modifier.drawWithContent {
             val progress = pressProgressAnimation.value
@@ -74,20 +54,25 @@ half4 main(float2 coord) {
                     Color.White.copy(0.06f * progress),
                     blendMode = BlendMode.Plus
                 )
-                shader.apply {
-                    val position = position(size, positionAnimation.value)
-                    setFloatUniform("size", size.width, size.height)
-                    setColorUniform("color", Color.White.copy(0.12f * progress).toArgb())
-                    setFloatUniform("radius", size.minDimension * 1.2f)
-                    setFloatUniform(
-                        "position",
-                        position.x.fastCoerceIn(0f, size.width),
-                        position.y.fastCoerceIn(0f, size.height)
-                    )
-                }
-                drawRect(
-                    ShaderBrush(shader),
-                    blendMode = BlendMode.Plus
+                // 轻量径向光斑（替代 AGSL RuntimeShader：拖动时每帧全屏 shader 重绘会掉帧，
+                // 表现为「越滑越慢」；radialGradient 视觉近似且开销低一个量级）
+                val pos = position(size, positionAnimation.value)
+                val centerX = pos.x.fastCoerceIn(0f, size.width)
+                val centerY = pos.y.fastCoerceIn(0f, size.height)
+                val radius = size.minDimension * 0.8f
+                val center = Offset(centerX, centerY)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color.White.copy(0.12f * progress),
+                            Color.White.copy(0f),
+                        ),
+                        center = center,
+                        radius = radius,
+                    ),
+                    radius = radius,
+                    center = center,
+                    blendMode = BlendMode.Plus,
                 )
             }
 
@@ -97,6 +82,9 @@ half4 main(float2 coord) {
     val gestureModifier: Modifier =
         Modifier.pointerInput(animationScope) {
             inspectDragGestures(
+                // 观察型手势：不消费事件，且忽略事件已被消费（同节点 DampedDragAnimation
+                // 内层先 consume，若不忽略，外层高光会被 cancel 而消失）
+                ignoreConsumed = true,
                 onDragStart = { down ->
                     startPosition = down.position
                     animationScope.launch {

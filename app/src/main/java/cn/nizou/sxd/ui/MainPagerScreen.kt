@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.nizou.sxd.BuildConfig
+import cn.nizou.sxd.HOST_PACKAGE_NAME
 import cn.nizou.sxd.XposedInit
 import cn.nizou.sxd.ui.animation.predictiveback.weKitNavTransition
 import cn.nizou.sxd.ui.components.BaseWidget
@@ -342,7 +343,8 @@ private fun deviceInfoEntries(): List<HomeInfoEntry> {
     val context = LocalContext.current
     val hostVersion = remember {
         runCatching {
-            context.packageManager.getPackageInfo("com.fenbian.android.leo", 0)
+            // ⚠️ 曾误写 "com.fenbian.android.leo"（多一个 n）→ getPackageInfo 永远查不到 → 一直显示「未安装」
+            context.packageManager.getPackageInfo(HOST_PACKAGE_NAME, 0)
         }.getOrNull()
     }
     val frameworkInfo = remember {
