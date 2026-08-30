@@ -63,6 +63,12 @@ class DampedDragAnimation(
     private var valueState by mutableFloatStateOf(initialValue)
     private var targetValueState by mutableFloatStateOf(initialValue)
 
+    // 拖动速度（pill 速度形变用）：同步在 snapToValue 里计算（位移/时间，轻平滑），
+    // 不用原版 VelocityTracker（每帧 System.currentTimeMillis + launch animateTo 协程堆积）。
+    private var lastSnapValue = initialValue
+    private var lastSnapTimeMs = 0L
+    private var velocityState by mutableFloatStateOf(0f)
+
     private val pressProgressAnimation =
         Animatable(0f, 0.001f)
     private val scaleXAnimation =
@@ -77,9 +83,8 @@ class DampedDragAnimation(
     val pressProgress: Float get() = pressProgressAnimation.value
     val scaleX: Float get() = scaleXAnimation.value
     val scaleY: Float get() = scaleYAnimation.value
-    // velocity 不再追踪（原 VelocityTracker 每帧 System.currentTimeMillis+协程，徒增开销；
-    // 仅影响 pill 的速度变形视觉效果，略去后无感知差异）
-    val velocity: Float get() = 0f
+    // 拖动速度（tab/ms），驱动 pill 速度形变（layerBlock）；同步计算无协程
+    val velocity: Float get() = velocityState
 
     val modifier: Modifier = Modifier.pointerInput(Unit) {
         val touchSlopSquared = viewConfiguration.touchSlop.let { it * it }
@@ -176,14 +181,23 @@ class DampedDragAnimation(
         }
     }
 
-    /** 拖动跟手：**同步**写值（普通状态直接赋值，零延迟无协程）。 */
+    /** 拖动跟手：**同步**写值（普通状态直接赋值，零延迟无协程），并同步计算拖动速度。 */
     fun snapToValue(value: Float) {
         val target = value.coerceIn(valueRange)
+        val now = System.currentTimeMillis()
+        val dt = (now - lastSnapTimeMs).coerceIn(1L, 100L)
+        if (lastSnapTimeMs > 0L) {
+            // 位移/时间 = tab/ms，轻平滑防抖
+            val raw = (target - lastSnapValue) / dt
+            velocityState = velocityState * 0.6f + raw * 0.4f
+        }
+        lastSnapValue = target
+        lastSnapTimeMs = now
         targetValueState = target
         valueState = target
     }
 
-    /** 松手/点击回位：spring 动画到目标（含按压缩放效果）。 */
+    /** 松手/点击回位：spring 动画到目标（含按压缩放效果），速度随动画自然衰减。 */
     fun animateToValue(value: Float) {
         val target = value.coerceIn(valueRange)
         targetValueState = target
@@ -194,7 +208,11 @@ class DampedDragAnimation(
                     initialValue = valueState,
                     targetValue = target,
                     animationSpec = valueAnimationSpec,
-                ) { v, _ -> valueState = v }
+                ) { v, _ ->
+                    valueState = v
+                    velocityState *= 0.9f // 回位动画中速度指数衰减（形变平滑收尾）
+                }
+                velocityState = 0f
                 release()
             }
         }
