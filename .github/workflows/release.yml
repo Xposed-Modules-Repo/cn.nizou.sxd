@@ -278,7 +278,9 @@ jobs:
   lsposed_sync:
     name: Sync LSPosed mirror
     needs: [build_signed, release]
-    if: github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') && inputs.publish_lsposed == 'true'
+    # 默认同步 LSPosed（input 未传/传 true 都同步；仅显式 false 跳过——GitHub UI 对
+    # boolean input 未勾选时传 'false'，之前因条件写 =='true' 导致用户触发时 job 被 skip）
+    if: github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') && inputs.publish_lsposed != 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: write
