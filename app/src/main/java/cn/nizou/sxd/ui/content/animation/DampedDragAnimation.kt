@@ -25,6 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -181,7 +182,8 @@ class DampedDragAnimation(
         }
     }
 
-    /** 拖动跟手：**同步**写值（普通状态直接赋值，零延迟无协程），并同步计算拖动速度。 */
+    /** 拖动跟手：同步更新**目标值**（手指位置零延迟），渲染值由跟随动画弹簧追赶——
+     * 拖动中指示器弹簧跟在手指后（wekit 手感的弹性跟随），松手自然 q弹收敛。 */
     fun snapToValue(value: Float) {
         val target = value.coerceIn(valueRange)
         val now = System.currentTimeMillis()
@@ -194,29 +196,15 @@ class DampedDragAnimation(
         lastSnapValue = target
         lastSnapTimeMs = now
         targetValueState = target
-        valueState = target
     }
 
-    /** 松手/点击回位：spring 动画到目标（含按压缩放效果），速度随动画自然衰减。 */
+    /** 松手/点击回位：设目标值（跟随动画弹簧收敛=带初速度 q弹）+ 按压缩放效果。 */
     fun animateToValue(value: Float) {
         val target = value.coerceIn(valueRange)
-        targetValueState = target
         animationScope.launch {
             mutatorMutex.mutate {
                 press()
-                animate(
-                    initialValue = valueState,
-                    targetValue = target,
-                    // ★ 拖动末速度作为初速度（velocityState 单位 tab/ms → *1000 转 tab/s）：
-                    // wekit 用 Animatable.animateTo 会继承当前速度，弹簧带速度冲过头再回弹 = q弹；
-                    // 之前未传 initialVelocity（默认 0，静止起步）所以弹不起来。
-                    initialVelocity = velocityState * 1000f,
-                    animationSpec = valueAnimationSpec,
-                ) { v, _ ->
-                    valueState = v
-                    velocityState *= 0.9f // 回位动画中速度指数衰减（形变平滑收尾）
-                }
-                velocityState = 0f
+                targetValueState = target
                 release()
             }
         }
@@ -224,4 +212,25 @@ class DampedDragAnimation(
 
     /** 兼容保留（拖动跟手一律走 [snapToValue]）。 */
     fun updateValue(value: Float) = animateToValue(value)
+
+    init {
+        // 跟随动画：监听目标值变化，渲染值 valueState 用弹簧持续追赶（带当前速度=q弹）。
+        // 拖动中手指移动 → targetValueState 每帧变化 → collectLatest 取消旧弹簧启动新的
+        // （从当前渲染值带速度追新目标）——这就是 wekit 的弹性跟随手感（跟手且有 lag/形变），
+        // 且 collectLatest 自动取消不会堆积协程。
+        animationScope.launch {
+            snapshotFlow { targetValueState }.collectLatest { target ->
+                animate(
+                    initialValue = valueState,
+                    targetValue = target,
+                    initialVelocity = velocityState * 1000f,
+                    animationSpec = valueAnimationSpec,
+                ) { v, _ ->
+                    valueState = v
+                    velocityState *= 0.9f // 速度指数衰减（形变平滑收尾）
+                }
+                velocityState = 0f
+            }
+        }
+    }
 }
