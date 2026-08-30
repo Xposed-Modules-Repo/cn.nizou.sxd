@@ -7,6 +7,7 @@ import android.util.Log
 import cn.nizou.sxd.HOST_PACKAGE_NAME
 import cn.nizou.sxd.MODULE_PREFS_NAME
 import cn.nizou.sxd.hook.BaseHook
+import cn.nizou.sxd.util.ConfigTransfer
 import cn.nizou.sxd.util.DexKitLocator
 import cn.nizou.sxd.util.HookStatus
 import cn.nizou.sxd.util.XposedHelpers
@@ -107,6 +108,21 @@ class XposedInit : XposedModule() {
                         ctx.getSharedPreferences(MODULE_PREFS_NAME, android.content.Context.MODE_PRIVATE)
                             .edit().putBoolean("hook_active", true).apply()
                     }.onFailure { Log.e("AutoOral", "markActive(local) failed", it) }
+                    // 首次启动注入默认配置（2026-08-30 用户提供，账号类 ui_ 键已剔除；
+                    // importJson 走宿主进程直写 modulePrefs，一次性填充后打标记）。
+                    runCatching {
+                        val ctx = chain.thisObject as? android.content.Context ?: return@runCatching
+                        val prefs = ctx.getSharedPreferences(
+                            MODULE_PREFS_NAME, android.content.Context.MODE_PRIVATE
+                        )
+                        if (!prefs.getBoolean("default_config_applied", false)) {
+                            val json = moduleRes.assets.open("default_config.json")
+                                .bufferedReader().use { it.readText() }
+                            if (ConfigTransfer.importJson(json) == null) {
+                                prefs.edit().putBoolean("default_config_applied", true).apply()
+                            }
+                        }
+                    }.onFailure { Log.e("AutoOral", "default config init failed", it) }
                 } catch (e: Throwable) {
                     Log.e("AutoOral", "hook after attach failed", e)
                 }

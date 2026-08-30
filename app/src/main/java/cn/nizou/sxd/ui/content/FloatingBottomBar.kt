@@ -209,8 +209,7 @@ fun <T> FloatingBottomBar(
     onSelectedTabTap: ((index: Int) -> Unit)? = null,
     onTabLongPress: ((index: Int) -> Boolean)? = null,
     liquidGlassBlurRadius: Dp = 4.dp,
-    // 陀螺仪光效默认关闭（用户要求，设置页可开）：开启后指示器高光随设备倾斜旋转
-    dynamicGravityHighlight: Boolean = false,
+    dynamicGravityHighlight: Boolean = true,
 ) {
     val isInDark = isSystemInDarkTheme()
     val pillShape = remember { CircleShape }

@@ -86,7 +86,6 @@ class DampedDragAnimation(
         var longPressJob: Job? = null
 
         inspectDragGestures(
-            consumeOnDrag = true, // 防下层 HorizontalPager scrollable 抢手势（页面不乱动）
             onDragStart = { down ->
                 downPosition = down.position
                 movedBeyondTouchSlop = false
@@ -177,16 +176,6 @@ class DampedDragAnimation(
         animationScope.launch {
             launch { valueAnimation.animateTo(targetValue, valueAnimationSpec) { updateVelocity() } }
         }
-    }
-
-    /**
-     * 拖动跟手：直接设置值（无动画）。拖动中高频调用时用 snap（spring 每次重启会
-     * 追不上手指，表现为「越拖越慢」，wekit 原版 onDrag 用 updateValue 有此问题）；
-     * 松手回位仍走 [animateToValue]/[updateValue] 动画。
-     */
-    fun snapToValue(value: Float) {
-        val target = value.coerceIn(valueRange)
-        animationScope.launch { valueAnimation.snapTo(target) }
     }
 
     fun animateToValue(value: Float) {

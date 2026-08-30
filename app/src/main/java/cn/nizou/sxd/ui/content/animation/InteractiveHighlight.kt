@@ -97,9 +97,6 @@ half4 main(float2 coord) {
     val gestureModifier: Modifier =
         Modifier.pointerInput(animationScope) {
             inspectDragGestures(
-                // 观察型手势：不消费事件，且忽略事件已被消费（同节点 DampedDragAnimation
-                // 内层先 consume，若不忽略，外层高光会被 cancel 而消失）
-                ignoreConsumed = true,
                 onDragStart = { down ->
                     startPosition = down.position
                     animationScope.launch {

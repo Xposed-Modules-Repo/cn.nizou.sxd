@@ -51,10 +51,13 @@ object ConfigTransfer {
 
     /**
      * 导出：读真实配置 → 扁平 JSON 文本。
+     * **账号类键（`ui_` 前缀：名字/cookie/uid/头像/子账号等，UserInfoStore 数据）不导出**，
+     * 避免配置文件泄露账号隐私（用户 2026-08-30 要求）。
      * @throws Exception 读取/序列化失败（调用方负责 toast 与 finish）。
      */
     fun exportJson(): String = buildJsonObject {
         for ((key, value) in readPrefsMap()) {
+            if (key.startsWith("ui_")) continue // 账号数据不入配置
             when (value) {
                 is Boolean -> put(key, value)
                 is Int -> put(key, value)
@@ -84,6 +87,7 @@ object ConfigTransfer {
 
         val map = mutableMapOf<String, Any>()
         for ((key, element) in parsed) {
+            if (key.startsWith("ui_")) continue // 账号数据不入配置（导入也忽略）
             when (element) {
                 is JsonNull -> Unit // 全量覆盖语义下无需单独删除
                 is JsonPrimitive -> when {
