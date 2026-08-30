@@ -61,14 +61,11 @@ fun HookStatusCard(modifier: Modifier = Modifier) {
                 MODULE_PREFS_NAME, android.content.Context.MODE_PRIVATE
             )?.getBoolean("hook_active", false)
         }.getOrNull() ?: false
-        // 2) RemotePreferences（需框架注入本进程；模块本体未注入时 self 未初始化 → 判空）
+        // 2) RemotePreferences（需框架注入本进程；模块本体未注入时 XposedInit.self 未初始化，
+        //    UninitializedPropertyAccessException 被 runCatching 兜住）
         val remote = runCatching {
-            if (::XposedInit.self.isInitialized) {
-                XposedInit.self.getRemotePreferences(MODULE_PREFS_NAME)
-                    .getBoolean("hook_active", false)
-            } else {
-                false
-            }
+            XposedInit.self.getRemotePreferences(MODULE_PREFS_NAME)
+                .getBoolean("hook_active", false)
         }.getOrNull() ?: false
         // 3) root 直读宿主 shared_prefs（真实注入状态，模块本体进程 root 可用）
         val hostPrefs = readHostHookActive()
