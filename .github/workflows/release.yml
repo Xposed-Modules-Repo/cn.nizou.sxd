@@ -29,6 +29,7 @@ jobs:
     outputs:
       versionName: ${{ steps.version.outputs.versionName }}
       versionCode: ${{ steps.version.outputs.versionCode }}
+      commitSha: ${{ steps.commit.outputs.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,7 +46,10 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      # ---- 版本解析：tag（v1.8.0 → versionName 1.8.0 / code 10800）或 version.properties ----
+      # ---- 版本解析（2026-08-30 用户要求：CI 不再 bump，只有 release 才升级版本号）----
+      # tag（v1.8.0 → versionName 1.8.0 / code 10800）；
+      # workflow_dispatch：当前 version.properties +1 作为本次发布版本（失败则不提交，
+      # 见 bump-version job —— 仅发布成功后执行，重试仍构建同一新版本，幂等）。
       - name: Resolve version
         id: version
         run: |
@@ -58,12 +62,18 @@ jobs:
             PATCH=$(echo "$VN" | cut -d. -f3)
             VC=$((MAJOR*10000 + MINOR*100 + PATCH))
           else
-            VN=$(grep -oP '^versionName=\K.*' version.properties | head -1)
             VC=$(grep -oP '^versionCode=\K\d+' version.properties | head -1)
+            VN=$(grep -oP '^versionName=\K.*' version.properties | head -1)
+            VC=$((VC + 1))
+            VN=$(echo "$VN" | awk -F. '{print $1"."$2"."($3+1)}')
           fi
           echo "versionName=$VN" >> "$GITHUB_OUTPUT"
           echo "versionCode=$VC" >> "$GITHUB_OUTPUT"
           echo "Release version: $VN (code $VC)"
+
+      - name: Record commit
+        id: commit
+        run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       # ---- 签名：keystore 解码到 RUNNER_TEMP 隔离，密钥走环境变量 ----
       - name: Decode keystore (RUNNER_TEMP isolated)
@@ -177,19 +187,33 @@ jobs:
           cp -v artifacts/mapping/*.txt assets/ 2>/dev/null || true
           echo "Assets:"; ls -1 assets
 
-      # ---- changelog：上次 release（tag）之后的提交（剔除版本自增提交）----
+      # ---- changelog：上一次发行版（任意类型 release）之后的全部提交（剔除版本自增提交）----
+      # 2026-08-30 用户要求：发行版内容 = 上次发行版之后所有 CI 的改动。
+      # 发布前 gh release list 第一条即「上一次发行版」的 tag；首次发布则取全部提交。
       - name: Generate changelog (since last release)
-        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PREV=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
-          if [ -n "$PREV" ]; then
-            git log --oneline --no-merges --grep="bump version" --invert-grep "$PREV..HEAD" > changelog.md
+          set -euo pipefail
+          PREV_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName // ""' 2>/dev/null || true)
+          echo "Previous release tag: ${PREV_TAG:-<none>}"
+          if [ -n "$PREV_TAG" ]; then
+            git log --oneline --no-merges --grep="bump version" --invert-grep "${PREV_TAG}..HEAD" > changelog.md || true
           else
-            git log --oneline --no-merges --grep="bump version" --invert-grep > changelog.md
+            git log --oneline --no-merges --grep="bump version" --invert-grep > changelog.md || true
           fi
-          echo "=== Changelog ==="; cat changelog.md
+          {
+            if [ -n "$PREV_TAG" ]; then
+              echo "## 变更（自上次发行版 ${PREV_TAG}）"
+            else
+              echo "## 变更"
+            fi
+            echo ""
+            cat changelog.md
+          } > notes.md
+          echo "=== Release notes ==="; cat notes.md
 
-      # ---- tag 触发 → 正式 Release（大版本，notes=上次 release 之后的改动）----
+      # ---- tag 触发 → 正式 Release（大版本，名字/内容同规格）----
       - name: Publish (tag release)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
@@ -197,7 +221,7 @@ jobs:
           name: 老挂戏老叟 ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
           files: assets/*
-          body_path: changelog.md
+          body_path: notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -206,6 +230,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VN: ${{ needs.build_signed.outputs.versionName }}
         run: |
           gh release delete CI --yes || true
           gh api -X DELETE repos/${{ github.repository }}/git/refs/tags/CI || true
@@ -215,10 +240,39 @@ jobs:
           PRERELEASE_FLAG=""
           if [ "${{ inputs.prerelease }}" = "true" ]; then PRERELEASE_FLAG="--prerelease"; fi
           gh release create CI \
-            --title "老挂戏老叟 CI" \
+            --title "老挂戏老叟 v${VN}" \
             $PRERELEASE_FLAG \
-            --notes "最新 CI 构建产物（commit ${{ github.sha }}）。应用内更新器通过 update.json 读取。" \
+            --notes-file notes.md \
             assets/*
+
+  # ---- 版本号提交（2026-08-30 用户要求：仅 release 成功后才改版本号；失败不改）----
+  # 依赖 [release] 成功：构建/发布任一步失败 → 本 job 不执行 → version.properties 保持原值，
+  # 重试 release 仍构建同一新版本（幂等）。[skip ci] + GITHUB_TOKEN push 不触发新 workflow。
+  bump-version:
+    name: Bump version
+    needs: [build_signed, release]
+    if: github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Commit bumped version
+        env:
+          NVC: ${{ needs.build_signed.outputs.versionCode }}
+          NVN: ${{ needs.build_signed.outputs.versionName }}
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main || true
+          sed -i "s/^versionCode=.*/versionCode=${NVC}/" version.properties
+          sed -i "s/^versionName=.*/versionName=${NVN}/" version.properties
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.properties
+          git commit -m "chore: bump version to ${NVN} (code ${NVC}) [skip ci]" || { echo "nothing to commit"; exit 0; }
+          git push
+          echo "Bumped to ${NVN} (code ${NVC})"
 
   # ---- LSPosed 镜像同步（workflow_dispatch 手动发布时自动执行；需 LSPOSED_PAT secret，未配置则跳过并提示）----
   lsposed_sync:
@@ -245,11 +299,12 @@ jobs:
           VN: ${{ needs.build_signed.outputs.versionName }}
         run: |
           set -euo pipefail
-          SHORT=$(git rev-parse --short HEAD)
+          # 用构建时的 commit（bump-version 可能与本 job 并行，checkout 的 HEAD 可能已被推进）
+          SHORT="${{ needs.build_signed.outputs.commitSha }}"
           TAG="${VC}-${VN}-${SHORT}"
           if [ -z "$LSPOSED_PAT" ]; then
             echo "::warning::LSPOSED_PAT 未配置，跳过自动同步。"
-            echo "::warning::手动步骤（参考 skill 05-skill.md 发布流程）：git push mirror main && git tag $TAG && git push mirror $TAG && gh release create $TAG --repo Xposed-Modules-Repo/cn.nizou.sxd --title \"$VN\" lsposed_assets/*.apk"
+            echo "::warning::手动步骤（参考 skill 05-skill.md 发布流程）：git push mirror main && git tag $TAG && git push mirror $TAG && gh release create $TAG --repo Xposed-Modules-Repo/cn.nizou.sxd --title \"老挂戏老叟 $VN\" lsposed_assets/*.apk"
             exit 0
           fi
           export GH_TOKEN="$LSPOSED_PAT"
@@ -260,7 +315,7 @@ jobs:
           git tag "$TAG"
           git push mirror "$TAG"
           gh release create "$TAG" --repo Xposed-Modules-Repo/cn.nizou.sxd \
-            --title "$VN" \
+            --title "老挂戏老叟 $VN" \
             --notes "老挂戏老叟 $VN (code $VC)：CI 构建产物（commit $SHORT）。LSPosed 官网模块页自动构建。" \
             lsposed_assets/*.apk
           echo "LSPosed mirror synced: tag $TAG, release created."

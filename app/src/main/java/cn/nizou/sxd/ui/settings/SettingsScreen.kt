@@ -18,12 +18,15 @@ import cn.nizou.sxd.ui.theme.AppPaletteStyle
 import cn.nizou.sxd.ui.theme.AppThemeMode
 import cn.nizou.sxd.ui.theme.PageTransitionAnimation
 import cn.nizou.sxd.ui.theme.ThemeSettings
+import cn.nizou.sxd.util.ConfigActions
 import cn.nizou.sxd.util.openGithub
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Brightness_medium
 import com.composables.icons.materialsymbols.outlined.Build_circle
 import com.composables.icons.materialsymbols.outlined.Colorize
 import com.composables.icons.materialsymbols.outlined.Contrast
+import com.composables.icons.materialsymbols.outlined.File_download
+import com.composables.icons.materialsymbols.outlined.File_upload
 import com.composables.icons.materialsymbols.outlined.Label
 import com.composables.icons.materialsymbols.outlined.Style
 import com.composables.icons.materialsymbols.outlined.Swipe
@@ -57,6 +60,11 @@ fun SettingsScreen(onBack: () -> Unit) {
     ) {
         item {
             ThemeSection()
+        }
+
+        // 配置（对齐 WeKit SettingsPager「配置」区：导出/导入 JSON；放在「关于」上方）
+        item {
+            ConfigSection()
         }
 
         item {
@@ -205,4 +213,28 @@ private fun ThemeSection() {
 private fun formatBuildTime(epochMillis: Long): String {
     val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
     return fmt.format(java.util.Date(epochMillis))
+}
+
+/**
+ * 「配置」区（对齐 WeKit SettingsPager 配置区）：导出/导入 JSON。
+ * 经 [ConfigActions] 统一走透明 Activity + 安卓官方文件选取工具（SAF）。
+ */
+@Composable
+private fun ConfigSection() {
+    val context = LocalContext.current
+
+    SegmentedColumn(title = "配置") {
+        BaseWidget(
+            icon = MaterialSymbols.Outlined.File_upload,
+            title = "导出配置",
+            description = "将全部设置保存为 JSON 文件",
+            onClick = { ConfigActions.export(context) },
+        )
+        BaseWidget(
+            icon = MaterialSymbols.Outlined.File_download,
+            title = "导入配置",
+            description = "从 JSON 文件恢复设置（覆盖当前全部设置）",
+            onClick = { ConfigActions.importFromDocument(context) },
+        )
+    }
 }

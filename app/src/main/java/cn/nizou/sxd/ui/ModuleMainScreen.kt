@@ -35,10 +35,13 @@ import androidx.compose.ui.unit.dp
 import cn.nizou.sxd.BuildConfig
 import cn.nizou.sxd.HOST_PACKAGE_NAME
 import cn.nizou.sxd.ui.components.HookStatusCard
+import cn.nizou.sxd.util.ConfigActions
 import cn.nizou.sxd.util.StringRes
 import cn.nizou.sxd.util.openGithub
 import cn.nizou.sxd.util.openSettingsInHostApp
 import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.outlined.File_download
+import com.composables.icons.materialsymbols.outlined.File_upload
 import com.composables.icons.materialsymbols.outlined.Forum
 import com.composables.icons.materialsymbols.outlined.Public
 import com.composables.icons.materialsymbols.outlined.Rocket_launch
@@ -127,6 +130,22 @@ fun ModuleMainScreen(
                 title = "打开模块设置",
                 description = "在小猿口算内打开注入的设置面板",
                 onClick = { context.openSettingsInHostApp() }
+            )
+
+            // 导出配置（真实配置在宿主私有目录，经 root 读取 + 官方文件选取工具保存 JSON）
+            LauncherCard(
+                icon = MaterialSymbols.Outlined.File_upload,
+                title = "导出配置",
+                description = "将全部设置保存为 JSON 文件",
+                onClick = { ConfigActions.export(context) }
+            )
+
+            // 导入配置（覆盖当前全部设置，导入后重启小猿口算生效）
+            LauncherCard(
+                icon = MaterialSymbols.Outlined.File_download,
+                title = "导入配置",
+                description = "从 JSON 文件恢复设置",
+                onClick = { ConfigActions.importFromDocument(context) }
             )
 
             HorizontalDivider(

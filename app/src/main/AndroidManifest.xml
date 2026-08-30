@@ -28,6 +28,15 @@
                 <category android:name="de.robv.android.xposed.category.MODULE_SETTINGS" />
             </intent-filter>
         </activity>
+
+        <!-- 配置导出/导入的透明承载 Activity（对齐 WeKit TransparentActivity）：
+             注入面板是 ComponentDialog 无 ActivityResultRegistry，经本透明 Activity
+             启动安卓官方文件选取工具（SAF）。exported=true 以便宿主进程拉起。 -->
+        <activity
+            android:name=".ui.ConfigTransferActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
     </application>
 
 </manifest>
