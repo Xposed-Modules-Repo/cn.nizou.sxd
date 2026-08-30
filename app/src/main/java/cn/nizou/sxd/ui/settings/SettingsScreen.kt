@@ -13,6 +13,7 @@ import cn.nizou.sxd.ui.components.M3BackButton
 import cn.nizou.sxd.ui.components.M3ListScaffold
 import cn.nizou.sxd.ui.components.SegmentedColumn
 import cn.nizou.sxd.ui.components.SwitchWidget
+import cn.nizou.sxd.ui.content.FloatingBottomBarMode
 import cn.nizou.sxd.ui.theme.AppColorSpec
 import cn.nizou.sxd.ui.theme.AppPaletteStyle
 import cn.nizou.sxd.ui.theme.AppThemeMode
@@ -109,6 +110,13 @@ private val pageTransitionLabels = mapOf(
     PageTransitionAnimation.MIUIX to "Miuix",
 )
 
+/** 底栏效果模式标签。 */
+private val bottomBarModeLabels = mapOf(
+    FloatingBottomBarMode.LiquidGlass to "液态玻璃 (Liquid Glass)",
+    FloatingBottomBarMode.Blur to "毛玻璃 (Blur)",
+    FloatingBottomBarMode.None to "纯色 (None)",
+)
+
 /**
  * 「界面」设置组（照 wekit `SettingsPager.ThemeSection` 行序）：
  * UI 组件引擎 → 主题模式 → 预见性返回动画 → 页面过渡动画 → 动态壁纸取色 →
@@ -171,6 +179,17 @@ private fun ThemeSection() {
             description = "底栏指示器高光随设备倾斜旋转（默认关闭）",
             checked = ThemeSettings.gravityHighlight,
             onCheckedChange = ThemeSettings::updateGravityHighlight,
+        )
+
+        DropDownMenuWidget(
+            icon = MaterialSymbols.Outlined.Style,
+            title = "底栏效果",
+            description = "液态玻璃渲染开销大，设备卡顿可降级",
+            value = ThemeSettings.bottomBarMode,
+            options = FloatingBottomBarMode.entries.map {
+                DropdownOption(it, bottomBarModeLabels.getValue(it))
+            },
+            onValueChange = ThemeSettings::updateBottomBarMode,
         )
 
         // 壁纸取色开启时隐藏自定义种子行（wekit 用 item(animatedVisibility=...)，

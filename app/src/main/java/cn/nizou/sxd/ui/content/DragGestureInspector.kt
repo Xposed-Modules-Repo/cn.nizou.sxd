@@ -25,6 +25,7 @@ suspend fun PointerInputScope.inspectDragGestures(
     onDragStart: (down: PointerInputChange) -> Unit = {},
     onDragEnd: (change: PointerInputChange) -> Unit = {},
     onDragCancel: () -> Unit = {},
+    consumeOnDrag: Boolean = false,
     onDrag: (change: PointerInputChange, dragAmount: Offset) -> Unit
 ) {
     awaitEachGesture {
@@ -39,9 +40,10 @@ suspend fun PointerInputScope.inspectDragGestures(
                 pointerId = initialDown.id,
                 onDrag = { change ->
                     onDrag(change, change.positionChange())
-                    // 消费水平拖动，防止漏给下层（MainPager 的 HorizontalPager scrollable
-                    // 会抢走同向手势 → 底栏拖动不跟手/弹回；wekit 是独立页无此冲突，本项目必须消费）
-                    change.consume()
+                    // 仅在需要阻止下层抢手势的调用方（DampedDragAnimation：防 HorizontalPager
+                    // scrollable 抢走同向水平手势）消费事件；InteractiveHighlight 等观察型
+                    // 手势不消费，否则外层先 consume 会让内层拖动手势收到已消费事件直接 cancel。
+                    if (consumeOnDrag) change.consume()
                 }
             )
         if (upEvent == null) {

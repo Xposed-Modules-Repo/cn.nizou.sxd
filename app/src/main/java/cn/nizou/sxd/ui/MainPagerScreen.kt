@@ -264,7 +264,8 @@ private fun MainPager(
             selectedIndex = { pagerState.targetPage },
             onSelected = { scope.launch { pagerState.animateScrollToPage(it) } },
             backdrop = backdrop,
-            // 陀螺仪光效开关（设置页「界面」组，默认关闭）
+            // 底栏效果模式（设置页「界面」组可切；卡顿可降级 Blur/None）+ 陀螺仪光效开关（默认关）
+            mode = ThemeSettings.bottomBarMode,
             dynamicGravityHighlight = ThemeSettings.gravityHighlight,
             colors = FloatingBottomBarDefaults.colors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,

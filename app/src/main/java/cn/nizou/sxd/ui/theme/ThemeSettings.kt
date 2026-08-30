@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import cn.nizou.sxd.ui.content.FloatingBottomBarMode
 import cn.nizou.sxd.util.SettingsPrefs
 import cn.nizou.sxd.util.StringRes
 import cn.nizou.sxd.util.currentApplication
@@ -43,6 +44,7 @@ object ThemeSettings {
     private const val KEY_COLOR_SPEC = "theme_color_spec"
     private const val KEY_SEED_COLOR = "theme_seed_color"
     private const val KEY_GRAVITY_HIGHLIGHT = "theme_gravity_highlight"
+    private const val KEY_BOTTOM_BAR_MODE = "theme_bottom_bar_mode"
 
     /** 默认取色（模块绿，对齐 wekit 语义：wekit 默认是微信绿 0xFF07C160）。 */
     const val DEFAULT_SEED_COLOR: Int = 0xFF2E7D32.toInt()
@@ -93,6 +95,19 @@ object ThemeSettings {
     )
         private set
 
+    /**
+     * 底栏效果模式（默认液态玻璃）。LiquidGlass 的全屏 backdrop 捕获 + blur 渲染开销大，
+     * 设备卡顿可降级 Blur（毛玻璃）或 None（纯色）。
+     */
+    var bottomBarMode by mutableStateOf(
+        runCatching {
+            FloatingBottomBarMode.valueOf(
+                SettingsPrefs.readString(prefsRes, KEY_BOTTOM_BAR_MODE, "")
+            )
+        }.getOrDefault(FloatingBottomBarMode.LiquidGlass)
+    )
+        private set
+
     /** 当前 palette style 不支持 2025 规范时，规格被强制回落到 2021。 */
     val effectiveColorSpec: AppColorSpec
         get() = if (paletteStyle.supportsSpec2025) colorSpec else AppColorSpec.SPEC_2021
@@ -140,6 +155,11 @@ object ThemeSettings {
     fun updateGravityHighlight(value: Boolean) {
         gravityHighlight = value
         SettingsPrefs.writeBoolean(prefsRes, KEY_GRAVITY_HIGHLIGHT, value)
+    }
+
+    fun updateBottomBarMode(value: FloatingBottomBarMode) {
+        bottomBarMode = value
+        SettingsPrefs.writeString(prefsRes, KEY_BOTTOM_BAR_MODE, value.name)
     }
 
     /** ARGB int → HSV float[3]。 */
