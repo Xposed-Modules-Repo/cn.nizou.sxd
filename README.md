@@ -2,7 +2,7 @@
 
 # 老挂戏老叟
 
-**小猿口算（`com.fenbi.android.leo`）LSPosed 增强模块 · libxposed Modern API 102**
+**小猿口算（`com.fenbi.android.leo`）LSPosed 增强模块 · libxposed Modern API 102，由于作者开学项目已停摆，请加入交流群等待simianv2发布，如果我有空也可能会继续更新，你们要我的vibe工作区我也能发。**
 
 [![Build APK](https://github.com/sxd91/cn.nizou.sxd/actions/workflows/ci.yml/badge.svg)](https://github.com/sxd91/cn.nizou.sxd/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/sxd91/cn.nizou.sxd?include_prereleases&label=release)](https://github.com/sxd91/cn.nizou.sxd/releases)
