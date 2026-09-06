@@ -50,6 +50,7 @@ import cn.nizou.sxd.ui.settings.CustomSettleScreen
 import cn.nizou.sxd.ui.settings.DebugScreen
 import cn.nizou.sxd.ui.settings.GeneralScreen
 import cn.nizou.sxd.ui.settings.LogsScreen
+import cn.nizou.sxd.ui.settings.RegionScreen
 import cn.nizou.sxd.ui.settings.NukeInjectedScreen
 import cn.nizou.sxd.ui.settings.SettingsScreen
 import cn.nizou.sxd.ui.settings.SimianV2AutomationScreen
@@ -95,6 +96,8 @@ sealed interface MainRoute : NavKey {
     data object Main : MainRoute
     @Serializable
     data object General : MainRoute
+    @Serializable
+    data object Region : MainRoute
     @Serializable
     data object SimianV2Automation : MainRoute
     @Serializable
@@ -177,6 +180,9 @@ fun MainPagerScreen(
                 }
                 entry<MainRoute.General>(swipeDismiss = NavSwipeDirection.LeftToRight) {
                     GeneralScreen(res, onBack = { navigator.pop() })
+                }
+                entry<MainRoute.Region>(swipeDismiss = NavSwipeDirection.LeftToRight) {
+                    RegionScreen(onBack = { navigator.pop() })
                 }
                 entry<MainRoute.SimianV2Automation>(swipeDismiss = NavSwipeDirection.LeftToRight) {
                     SimianV2AutomationScreen(onBack = { navigator.pop() })
@@ -403,6 +409,7 @@ private fun FeaturesTab(
     val entries = remember {
         listOf(
             FeatureMenuEntry("通用", "识别/昵称通用开关", MaterialSymbols.Outlined.Tune, MainRoute.General),
+            FeatureMenuEntry("改地区", "试卷列表省份筛选", MaterialSymbols.Outlined.Tune, MainRoute.Region),
             FeatureMenuEntry("SimianV2 自动化", "独立的正确答案、笔画与结果页操作", MaterialSymbols.Outlined.Edit_note, MainRoute.SimianV2Automation),
             FeatureMenuEntry("Debug", "调试开关", MaterialSymbols.Outlined.Bug_report, MainRoute.Debug),
             FeatureMenuEntry("关于", "版本与项目信息", MaterialSymbols.Outlined.Info, MainRoute.About),
