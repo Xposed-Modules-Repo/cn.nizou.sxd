@@ -48,15 +48,16 @@ class SimianHook(
             .intercept("simian_encrypt_result") { chain ->
                 val encoded = chain.getArg(0) as? String
                 if (encoded != null) {
-                    // 无论改答案开关都缓存题目答案（EncryptResult 载荷 = examVO.questions 明文 base64 JSON）
-                    cacheAnswers(encoded)
+                    // Custom answer/title must feed the rewritten payload into the SimianV2 recognition/stroke chain.
                     if (Simian.modifyAnswer || Simian.modifyTitle) {
                         rewriteEncryptPayload(encoded)?.let { newEncoded ->
+                            cacheAnswers(newEncoded)
                             val args = chain.args.toTypedArray()
                             args[0] = newEncoded
                             return@intercept chain.proceed(args)
                         }
                     }
+                    cacheAnswers(encoded)
                 }
                 chain.proceed()
             }

@@ -20,7 +20,7 @@ class SimianV2QuickAnswerHook(self: XposedInterface, classLoader: ClassLoader) :
                 ?: return@runCatching logI("SimianV2 correct-answer target unresolved")
             method.isAccessible = true
             method.intercept("simianv2_quick_answer") { chain ->
-                if (!SimianV2AutomationPrefs.quickAnswer) return@intercept chain.proceed()
+                if (!SimianV2AutomationPrefs.effectiveQuickAnswer) return@intercept chain.proceed()
                 val answers = chain.getArg(2) as List<*>
                 val original = chain.proceed()
                 answers.firstOrNull()?.toString() ?: original

@@ -162,6 +162,10 @@ object SimianV2AutomationPrefs {
     val autoHappyAccept get() = modulePrefs.getBoolean(HAPPY_ACCEPT, false)
     val autoContinue get() = modulePrefs.getBoolean(CONTINUE, false)
     val autoContinuePk get() = modulePrefs.getBoolean(CONTINUE_PK, false)
+    /** Custom answer, custom title, and custom question-count modes require recognition replacement and stroke submission together. */
+    val linkedCustomAnswer get() = Simian.modifyAnswer || Simian.modifyTitle || Simian.customQuestionCount > 0
+    val effectiveQuickAnswer get() = quickAnswer || linkedCustomAnswer
+    val effectiveAutoStroke get() = autoAnswer || linkedCustomAnswer
 }
 
 object Debug {
