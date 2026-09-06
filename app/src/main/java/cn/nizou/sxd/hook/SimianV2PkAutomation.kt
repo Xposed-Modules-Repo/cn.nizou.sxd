@@ -131,9 +131,51 @@ internal object SimianV2PkAutomation {
                     return null;
                 };
                 const deadline = Date.now() + 4000;
+                const enumKeys = obj => { try { return Object.keys(obj).slice(0, 14).join(','); } catch (_) { return 'no-keys'; } };
+                const describePad = (root) => {
+                    const seen = new Set(); let foundTypes = [];
+                    const st = [[root, 0]]; let scanned = 0;
+                    while (st.length && scanned < 8000) {
+                        const it = st.pop(); const o = it[0]; const dpt = it[1];
+                        if (!o || dpt > 6 || typeof o !== 'object' || seen.has(o)) continue;
+                        seen.add(o); scanned++;
+                        const cname = (()=>{try{return o.constructor && o.constructor.name;}catch(_){return '?';}})();
+                        if (cname && /(Signature|Pad|Stroke|Board|Writing|K|St|H)$/.test(cname) || ('_data' in o)) {
+                            foundTypes.push(cname + '/dispatch=' + typeof o.dispatchEvent + '/toData=' + typeof o.toData + '/keys=' + enumKeys(o) + '/dpt=' + dpt);
+                        }
+                        for (const k of Object.keys(o)) { const v = o[k]; if (v && typeof v === 'object') st.push([v, dpt+1]); }
+                    }
+                    return 'scanned=' + scanned + ' foundTypes=[' + foundTypes.slice(0,8).join('|') + ']';
+                };
                 const waitForPad = () => {
                     if (Date.now() > deadline) {
-                        fail('未找到真实画板 K（等待 4000ms） notes=' + (state.notes ? state.notes.join(',') : ''));
+                        const diag = (() => {
+                            let out = '';
+                            try {
+                                const canv = document.querySelectorAll('canvas');
+                                out = 'canvas=' + canv.length;
+                                const seenComp = new Set(); let comps = [];
+                                canv.forEach((cv, ci) => {
+                                    let node = cv.__vueParentComponent;
+                                    let hops = 0;
+                                    while (node && hops < 30 && !seenComp.has(node)) {
+                                        seenComp.add(node);
+                                        const nm = node.type && node.type.__name;
+                                        const pd = node ? describePad(node.provides) : '';
+                                        const su = node ? describePad(node.setupState) : '';
+                                        if (pd.indexOf('foundTypes=[') !== -1 && pd.indexOf('scanned=')!==1 || pd.indexOf('dispatch=function')!==-1) comps.push('cv'+ci+':prov:'+nm+':'+pd);
+                                        if (su.indexOf('dispatch=function')!==-1) comps.push('cv'+ci+':setup:'+nm+':'+su);
+                                        const real = pd.indexOf('dispatch=function')!==-1 ? pd : '';
+                                        node = node.parent; hops++;
+                                    }
+                                });
+                                out += ' comps=[' + comps.slice(0,4).join(' | ') + ']';
+                                const app = document.querySelector('#app');
+                                out += ' appkeys=' + enumKeys(app) + describePad(app);
+                            } catch (e) { out += ' diagerr=' + e; }
+                            return out;
+                        })();
+                        fail('未找到真实画板 K（等待 4000ms） diag:' + diag + ' notes=' + (state.notes ? state.notes.join(',') : ''));
                         return;
                     }
                     state.notes = state.notes || [];
