@@ -86,54 +86,68 @@ internal object SimianV2PkAutomation {
                 const key = ${JSONObject.quote(statusKey)};
                 const state = window[key] = { status: 'loading-module', pointCount: points.length, startedAt: Date.now() };
                 const fail = error => { state.status = 'failed'; state.error = String(error); state.finishedAt = Date.now(); };
-                System.import('$PAD_MODULE_URL')
-                    .then(module => {
-                        const deadline = Date.now() + 4000;
-                        const waitForPad = () => {
-                            const store = module.d?.();
-                            // module.d() exposes Vue refs/proxies. Find the real SignaturePad instance K,
-                            // not its wrapper: K owns _data, toData(), and EventTarget dispatchEvent().
-                            const isRealPad = value => value &&
-                                typeof value.dispatchEvent === 'function' &&
-                                typeof value.toData === 'function' &&
-                                ('_data' in value);
-                            const rootPad = store?.pad;
-                            const candidates = [
-                                rootPad, rootPad?.value, rootPad?._value,
-                                rootPad?.value?.value, rootPad?._value?.value,
-                                store?.recognizeBoard?.pad, store?.recognizeBoard?.pad?.value,
-                            ];
-                            const pad = candidates.find(isRealPad);
-                            if (!pad) {
-                                state.diagnostic = candidates.map((item, i) => {
-                                    if (!item) return i + ':null';
-                                    let keys = [];
-                                    try { keys = Object.keys(item).slice(0, 8); } catch (_) {}
-                                    return i + ':' + (item.constructor?.name || typeof item) +
-                                        ':dispatch=' + typeof item.dispatchEvent +
-                                        ':toData=' + typeof item.toData +
-                                        ':keys=' + keys.join(',');
-                                }).join('|');
-                                if (Date.now() < deadline) {
-                                    state.status = 'waiting-pad';
-                                    setTimeout(waitForPad, 100);
-                                } else {
-                                    fail('未找到真实画板 K（等待 4000ms）: ' + state.diagnostic);
+                const isRealPad = v => v && typeof v.dispatchEvent === 'function' && typeof v.toData === 'function' && '_data' in v;
+                const deepFind = (root, notes) => {
+                    const seen = new Set();
+                    const stack = [[root, 0]];
+                    let scanned = 0;
+                    while (stack.length && scanned < 60000) {
+                        const item = stack.pop();
+                        const o = item[0]; const depth = item[1];
+                        if (!o || depth > 8 || typeof o !== 'object') continue;
+                        if (seen.has(o)) continue;
+                        seen.add(o); scanned++;
+                        if (isRealPad(o)) { state.foundDepth = depth; return o; }
+                        let values = [];
+                        if (o.__v_isRef || ('_value' in o)) values.push(o._value ?? o.value);
+                        let keys = [];
+                        try { keys = Object.keys(o); } catch (_) {}
+                        for (const k of keys) { const v = o[k]; if (v && typeof v === 'object') values.push(v); }
+                        for (let i = values.length - 1; i >= 0; i--) stack.push([values[i], depth + 1]);
+                        if (scanned === 20000 || scanned === 40000) notes.push('scan=' + scanned);
+                    }
+                    state.scanned = scanned;
+                    return null;
+                };
+                const findPad = notes => {
+                    try {
+                        const canvases = document.querySelectorAll('canvas');
+                        notes.push('canvas=' + canvases.length);
+                        for (const canvas of canvases) {
+                            let node = canvas.__vueParentComponent || canvas.__vue_app__;
+                            const appHost = canvas.closest && canvas.closest('#app');
+                            if (!node && appHost) node = appHost.__vue_app__;
+                            let hops = 0;
+                            while (node && hops < 20) {
+                                for (const bucket of [node.provides, node.setupState, node.ctx, node.renderContext, node]) {
+                                    const found = bucket && deepFind(bucket, notes);
+                                    if (found) { notes.push('via=comp' + hops); return found; }
                                 }
-                                return;
+                                node = node.parent;
+                                hops++;
                             }
-                            pad._data = [{
-                                points: points, penColor: '#000', minWidth: 3, maxWidth: 3,
-                                velocityFilterWeight: 0.7, compositeOperation: 'source-over'
-                            }];
-                            state.status = 'dispatching-end-stroke';
-                            pad.dispatchEvent(new CustomEvent('endStroke', { detail: { synthetic: true } }));
-                            state.status = 'submitted';
-                            state.finishedAt = Date.now();
-                        };
-                        waitForPad();
-                    })
-                    .catch(fail);
+                        }
+                    } catch (e) { notes.push('err=' + e); }
+                    return null;
+                };
+                const deadline = Date.now() + 4000;
+                const waitForPad = () => {
+                    if (Date.now() > deadline) {
+                        fail('未找到真实画板 K（等待 4000ms） notes=' + (state.notes ? state.notes.join(',') : ''));
+                        return;
+                    }
+                    state.notes = state.notes || [];
+                    const pad = findPad(state.notes);
+                    if (!pad) { state.status = 'waiting-pad'; setTimeout(waitForPad, 100); return; }
+                    try {
+                        pad._data = [{ points: points, penColor: '#000', minWidth: 3, maxWidth: 3, velocityFilterWeight: 0.7, compositeOperation: 'source-over' }];
+                        state.status = 'dispatching-end-stroke';
+                        pad.dispatchEvent(new CustomEvent('endStroke', { detail: { synthetic: true } }));
+                        state.status = 'submitted';
+                        state.finishedAt = Date.now();
+                    } catch (e) { fail('dispatch: ' + e); }
+                };
+                setTimeout(waitForPad, 0);
                 return JSON.stringify({ key: key, status: state.status, pointCount: state.pointCount });
             })();
         """.trimIndent()
