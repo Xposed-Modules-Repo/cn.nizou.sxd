@@ -79,32 +79,60 @@ internal object SimianV2PkAutomation {
                 })
             }
         }
+        // Simian f2683bd “修复自动答题”：枚举页面实际加载的 /leo-web-oral-pk/assets/index-legacy.*.js，
+        // 逐个 System.import 并校验 module.d 源码含 recognizeConfig+pad 且 recognizeConfig 已初始化，
+        // 避免选到空或旧模块实例。
         val script = """
-            (() => {
-                const points = $pointsJson;
-                window.__strokeSubmitStatus = { status: 'loading-module', pointCount: points.length };
-                System.import('$PAD_MODULE_URL')
-                    .then(module => {
-                        const store = module.d?.();
-                        const pad = store?.pad?.value ?? store?.pad;
-                        if (!pad) { throw new Error('画板尚未初始化'); }
-                        pad._data = [{ points: points, penColor: '#000', minWidth: 3, maxWidth: 3, velocityFilterWeight: 0.7, compositeOperation: 'source-over' }];
-                        window.__strokeSubmitStatus.status = 'dispatching-end-stroke';
-                        pad.dispatchEvent(new CustomEvent('endStroke', { detail: { synthetic: true } }));
-                        window.__strokeSubmitStatus.status = 'submitted';
-                    })
-                    .catch(error => {
-                        window.__strokeSubmitStatus.status = 'failed';
-                        window.__strokeSubmitStatus.error = String(error);
-                    });
-                return JSON.stringify(window.__strokeSubmitStatus);
-            })();
-        """.trimIndent()
-        // After a short grace, read the async final status into the log.
+(() => {
+    const points = $pointsJson;
+    const status = window.__strokeSubmitStatus = { status: 'finding-module', pointCount: points.length };
+    const unref = target => { if (target && typeof target === 'object' && 'value' in target) { return target.value; } return target; };
+    const findWritingModule = async () => {
+        const resourceUrls = performance.getEntriesByType('resource').map(item => item.name);
+        const scriptUrls = Array.from(document.scripts).map(item => item.src).filter(Boolean);
+        const candidates = Array.from(new Set([...resourceUrls, ...scriptUrls]))
+            .filter(url => url.includes('/leo-web-oral-pk/assets/') && /index-legacy\.[^/]+\.js/.test(url));
+        status.candidates = candidates;
+        for (const moduleUrl of candidates) {
+            try {
+                const module = await System.import(moduleUrl);
+                if (typeof module?.d !== 'function') continue;
+                const exportSource = Function.prototype.toString.call(module.d);
+                if (!exportSource.includes('recognizeConfig') || !exportSource.includes('pad')) continue;
+                const store = module.d();
+                const pad = unref(store?.pad);
+                const recognizeConfig = unref(store?.recognizeConfig);
+                if (!pad || typeof pad.dispatchEvent !== 'function' || typeof pad.toData !== 'function') continue;
+                if (!recognizeConfig) continue;
+                return { moduleUrl, store, pad, recognizeConfig };
+            } catch (_) { /* 当前候选不是画板模块，继续检查 */ }
+        }
+        throw new Error('没有找到已初始化的画板模块');
+    };
+    if (typeof System === 'undefined' || typeof System.import !== 'function') { status.status = 'failed'; status.error = '当前页面不支持System.import'; return JSON.stringify(status); }
+    findWritingModule().then(result => {
+        const pad = result.pad; const config = result.recognizeConfig;
+        status.moduleUrl = result.moduleUrl; status.keypointId = config.keypointId; status.expectedResult = config.answers;
+        pad._data = [{ points: points, penColor: '#000', minWidth: 3, maxWidth: 3, velocityFilterWeight: 0.7, compositeOperation: 'source-over' }];
+        if ('_isEmpty' in pad) { pad._isEmpty = false; }
+        status.status = 'dispatching-end-stroke';
+        pad.dispatchEvent(new CustomEvent('endStroke', { detail: { synthetic: true } }));
+        status.status = 'waiting-recognition';
+    }).catch(error => { status.status = 'failed'; status.error = String(error?.stack || error?.message || error); });
+    return JSON.stringify(status);
+})();
+""".trimIndent()
         webView.post {
             if (!webView.isAttachedToWindow) { logI("SimianV2 笔画提交被取消：WebView detached"); return@post }
             webView.evaluateJavascript(script) { result ->
                 logI("SimianV2 笔画提交 $index/$total result: " + result)
+                // 延迟读最终状态（waiting-recognition / failed）
+                handler.postDelayed({
+                    if (!webView.isAttachedToWindow) return@postDelayed
+                    webView.evaluateJavascript("JSON.stringify(window.__strokeSubmitStatus || { status: 'missing' })") { raw ->
+                        logI("SimianV2 笔画提交 $index/$total final: " + (raw ?: "null"))
+                    }
+                }, 3500L)
             }
         }
     }    fun clickHappyAccept(webView: WebView, delay: Long = 3000L) = schedule(Task.HAPPY, webView, delay, "开心收下") { click(webView,"开心收下") }
