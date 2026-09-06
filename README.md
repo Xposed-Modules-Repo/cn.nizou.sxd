@@ -35,8 +35,8 @@
 
 ### 口算 PK
 
-> ⚠️ **自动提交笔画 / 自动答题（SimianV2 画板链路）疑似已被官方修复/受限，可能无法使用**
-> 在新版小猿口算（含 3.140.1 实测）中，动态画板模块改为按页面实例加载，自动写入笔画并派发 `endStroke` 的方式可能不再生效或被风控拦截。若进局后无 `submitted` 且日志停在 `loading-module` / `画板尚未初始化`，即属此情形。该能力为尽力而为，不保证在官方更新后继续可用。
+> ✅ **已修复自动提交画笔（自动答题）** — 感谢 [SimianV2](https://github.com/z2010643575/Simian)
+> 现已按 SimianV2 最新「修复自动答题」方案移植：提交时自动枚举页面真实加载的 `/leo-web-oral-pk/assets/index-legacy.*.js` 画板模块（不再硬编码旧 hash），`System.import` 后仅当 `module.d` 源码含 `recognizeConfig`+`pad`、画板已初始化（`pad.dispatchEvent/toData` 可用且 `recognizeConfig` 就绪）才写入笔画并派发 `endStroke`。修复与适配能力源自 SimianV2，特此致谢。
 - 口算 PK 自动答题
 - **口算 PK 秒结算**（移植自 [ExElectron/Xiaoyuan_Kousuan_2026](https://github.com/ExElectron/Xiaoyuan_Kousuan_2026) 的 7 大 patch，运行时注入）：
   - 进局环境加速：CSS 动画压至 0s / 音效静音 / 自动模拟笔画（AUTODRAW）/ 跳题 0ms / 判题恒真兜底 / 跳过手写识别等待
