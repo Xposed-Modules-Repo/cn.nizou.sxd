@@ -24,8 +24,11 @@ import cn.nizou.sxd.util.SimianV2AutomationPrefs
 fun SimianV2AutomationScreen(onBack: () -> Unit) {
     var quickAnswer by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.QUICK_ANSWER, false)) }
     var autoAnswer by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.AUTO_ANSWER, false)) }
-    var firstDelay by remember { mutableStateOf(SettingsPrefs.readString(SimianV2AutomationPrefs.AUTO_ANSWER_DELAY, "10500")) }
+    var firstDelay by remember { mutableStateOf(SettingsPrefs.readString(SimianV2AutomationPrefs.AUTO_ANSWER_DELAY, "9500")) }
     var submitInterval by remember { mutableStateOf(SettingsPrefs.readString(SimianV2AutomationPrefs.SUBMIT_INTERVAL, "20")) }
+    var retryMax by remember { mutableStateOf(SettingsPrefs.readInt(SimianV2AutomationPrefs.RETRY_MAX, 10).toString()) }
+    var retryDelay by remember { mutableStateOf(SettingsPrefs.readString(SimianV2AutomationPrefs.RETRY_DELAY, "20")) }
+    var quickSubmit by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.QUICK_SUBMIT, false)) }
     var happyAccept by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.HAPPY_ACCEPT, false)) }
     var continueMatch by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.CONTINUE, false)) }
     var continuePk by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.CONTINUE_PK, false)) }
@@ -46,8 +49,14 @@ fun SimianV2AutomationScreen(onBack: () -> Unit) {
                     checked = autoAnswer,
                     onCheckedChange = { autoAnswer = it; SettingsPrefs.writeBoolean(SimianV2AutomationPrefs.AUTO_ANSWER, it) },
                 )
+                SwitchWidget(
+                    title = "秒提交",
+                    description = "隐藏 PK 开场等待，画板就绪后立即提交（首题不等固定延迟）",
+                    checked = quickSubmit,
+                    onCheckedChange = { quickSubmit = it; SettingsPrefs.writeBoolean(SimianV2AutomationPrefs.QUICK_SUBMIT, it) },
+                )
                 TextFieldDialogWidget(
-                    title = "首次提交等待", value = firstDelay, placeholder = "单位毫秒，默认 10500", enabled = autoAnswer,
+                    title = "首次提交等待", value = firstDelay, placeholder = "单位毫秒，默认 9500", enabled = autoAnswer,
                     keyboardType = KeyboardType.Number, filter = { value -> value.filter(Char::isDigit) },
                     onValueChange = { firstDelay = it; SettingsPrefs.writeString(SimianV2AutomationPrefs.AUTO_ANSWER_DELAY, it) },
                 )
@@ -55,6 +64,16 @@ fun SimianV2AutomationScreen(onBack: () -> Unit) {
                     title = "每次提交间隔", value = submitInterval, placeholder = "单位毫秒，默认 20", enabled = autoAnswer,
                     keyboardType = KeyboardType.Number, filter = { value -> value.filter(Char::isDigit) },
                     onValueChange = { submitInterval = it; SettingsPrefs.writeString(SimianV2AutomationPrefs.SUBMIT_INTERVAL, it) },
+                )
+                TextFieldDialogWidget(
+                    title = "失败重试次数", value = retryMax, placeholder = "最多 10", enabled = autoAnswer,
+                    keyboardType = KeyboardType.Number, filter = { value -> value.filter(Char::isDigit) },
+                    onValueChange = { retryMax = it; SettingsPrefs.writeInt(SimianV2AutomationPrefs.RETRY_MAX, it.filter(Char::isDigit).toIntOrNull() ?: 0) },
+                )
+                TextFieldDialogWidget(
+                    title = "重试间隔", value = retryDelay, placeholder = "单位毫秒，默认 20", enabled = autoAnswer,
+                    keyboardType = KeyboardType.Number, filter = { value -> value.filter(Char::isDigit) },
+                    onValueChange = { retryDelay = it; SettingsPrefs.writeString(SimianV2AutomationPrefs.RETRY_DELAY, it) },
                 )
             }
         }

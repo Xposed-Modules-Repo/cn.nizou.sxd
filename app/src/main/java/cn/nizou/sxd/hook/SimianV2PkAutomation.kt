@@ -21,11 +21,8 @@ internal object SimianV2PkAutomation {
     private val points = listOf(PointF(146.8571f,498.5714f),PointF(146.8571f,516.2858f),PointF(146.8571f,544.4261f),PointF(148f,561.7143f),PointF(148f,584f),PointF(148f,610.8572f),PointF(148f,627.7143f),PointF(149.7143f,652.2858f),PointF(151.4286f,668f),PointF(153.1429f,675.7143f),PointF(156.8571f,684.5715f))
 
     /** One cancellable session owns every delayed stroke for the current exercise page. */
-    fun scheduleStroke(webView: WebView, delay: Long) {
-        // Only one PK exercise may own delayed strokes at a time, even if the host creates a new WebView.
+    fun scheduleStroke(webView: WebView, firstDelay: Long) {
         strokeSession?.let { active -> cancelStrokeSession(active.webView, "replaced by a new exercise page") }
-        // 每局笔画次数 = 实际题数。模块改写题目集时（改题目/改答案+自定义题数）用改写后的 N；
-        // 否则（纯自动笔画走宿主真实题目）优先用原生 match 捕获的题目数 N（PkNativeSession），兜底配置值。
         val rewrittenSet = Simian.customTitleEnabled || Simian.modifyAnswer
         val nativeN = PkNativeSession.nativeQuestionCount
         val countSource = when { rewrittenSet -> "rewrite"; nativeN > 0 -> "native-match"; else -> "config" }
@@ -34,23 +31,23 @@ internal object SimianV2PkAutomation {
             nativeN > 0 -> nativeN
             else -> Simian.strokeSubmissionCount
         }
+        val interval = SimianV2AutomationPrefs.submitInterval.coerceAtLeast(0L)
+        // 秒提交：去掉开场等待，用快速尝试轮询待页面/画板就绪后立即提交。
+        val effectiveFirst = if (SimianV2AutomationPrefs.quickSubmit) SimianV2AutomationPrefs.quickDelay.coerceAtLeast(0L) else firstDelay.coerceAtLeast(0L)
         val session = StrokeSession(webView)
         strokeSession = session
         repeat(total) { index ->
             lateinit var task: Runnable
             task = Runnable {
                 if (strokeSession !== session || !session.tasks.remove(task)) return@Runnable
-                if (!webView.isAttachedToWindow) {
-                    logI("SimianV2 笔画提交失败：WebView已经离开窗口")
-                    return@Runnable
-                }
-                submitStrokeWithoutDrawing(webView, index + 1, total)
+                if (!webView.isAttachedToWindow) { logI("SimianV2 笔画提交失败：WebView已经离开窗口"); return@Runnable }
+                submitWithRetry(webView, index + 1, total, 0, SimianV2AutomationPrefs.quickSubmit)
                 if (session.tasks.isEmpty() && strokeSession === session) strokeSession = null
             }
             session.tasks += task
-            handler.postDelayed(task, delay.coerceAtLeast(0L) + index * SimianV2AutomationPrefs.submitInterval.coerceAtLeast(0L))
+            handler.postDelayed(task, effectiveFirst + index * interval)
         }
-        logI("SimianV2 stroke session scheduled: $total (source=$countSource)")
+        logI("SimianV2 stroke session scheduled: $total first=${effectiveFirst}ms interval=${interval}ms (source=$countSource)")
     }
 
     /** Cancels the complete delayed-stroke sequence for this WebView. */
@@ -64,11 +61,25 @@ internal object SimianV2PkAutomation {
         if (cancelled > 0) logI("SimianV2 stroke session cancelled: $cancelled ($reason)")
     }
 
-    private fun submitStrokeWithoutDrawing(webView: WebView, index: Int, total: Int) {
-        if (!webView.isAttachedToWindow) {
-            logI("SimianV2 笔画提交失败：WebView已经离开窗口")
-            return
+    /** 带重试的笔画提交：失败时重复提交，不超过 retryMax 次，间隔 retryDelay 毫秒。 */
+    private fun submitWithRetry(webView: WebView, index: Int, total: Int, attempt: Int, quick: Boolean) {
+        if (!webView.isAttachedToWindow) return
+        submitStrokeOnce(webView, index, total) { ok ->
+            if (ok) return
+            val max = if (quick) 500 else SimianV2AutomationPrefs.retryMax.coerceAtLeast(1)
+            if (attempt < max) {
+                val rd = (if (quick) 150L else SimianV2AutomationPrefs.retryDelay.coerceAtLeast(0L))
+                logI("SimianV2 笔画提交 $index/$total 失败，重试 ${attempt + 1}/$max (间隔 ${rd}ms)")
+                handler.postDelayed({ submitWithRetry(webView, index, total, attempt + 1, quick) }, rd)
+            } else {
+                logI("SimianV2 笔画提交 $index/$total 失败，已达最大重试次数")
+            }
         }
+    }
+
+    /** 执行一次笔画提交，延迟读最终状态并回调 ok。 */
+    private fun submitStrokeOnce(webView: WebView, index: Int, total: Int, onDone: (Boolean) -> Unit) {
+        if (!webView.isAttachedToWindow) { logI("SimianV2 笔画提交失败：WebView已经离开窗口"); return }
         val startTime = System.currentTimeMillis()
         val pointsJson = JSONArray().apply {
             points.forEachIndexed { pointIndex, point ->
@@ -80,9 +91,6 @@ internal object SimianV2PkAutomation {
                 })
             }
         }
-        // Simian f2683bd “修复自动答题”：枚举页面实际加载的 /leo-web-oral-pk/assets/index-legacy.*.js，
-        // 逐个 System.import 并校验 module.d 源码含 recognizeConfig+pad 且 recognizeConfig 已初始化，
-        // 避免选到空或旧模块实例。
         val script = """
 (() => {
     const points = $pointsJson;
@@ -106,7 +114,7 @@ internal object SimianV2PkAutomation {
                 if (!pad || typeof pad.dispatchEvent !== 'function' || typeof pad.toData !== 'function') continue;
                 if (!recognizeConfig) continue;
                 return { moduleUrl, store, pad, recognizeConfig };
-            } catch (_) { /* 当前候选不是画板模块，继续检查 */ }
+            } catch (_) { }
         }
         throw new Error('没有找到已初始化的画板模块');
     };
@@ -124,19 +132,21 @@ internal object SimianV2PkAutomation {
 })();
 """.trimIndent()
         webView.post {
-            if (!webView.isAttachedToWindow) { logI("SimianV2 笔画提交被取消：WebView detached"); return@post }
+            if (!webView.isAttachedToWindow) return@post
             webView.evaluateJavascript(script) { result ->
                 logI("SimianV2 笔画提交 $index/$total result: " + result)
-                // 延迟读最终状态（waiting-recognition / failed）
                 handler.postDelayed({
-                    if (!webView.isAttachedToWindow) return@postDelayed
+                    if (!webView.isAttachedToWindow) { onDone(false); return@postDelayed }
                     webView.evaluateJavascript("JSON.stringify(window.__strokeSubmitStatus || { status: 'missing' })") { raw ->
-                        logI("SimianV2 笔画提交 $index/$total final: " + (raw ?: "null"))
+                        val final = (raw ?: "null")
+                        logI("SimianV2 笔画提交 $index/$total final: " + final)
+                        onDone(final.contains("waiting-recognition") || final.contains("dispatching-end-stroke"))
                     }
-                }, 3500L)
+                }, 1200L)
             }
         }
-    }    fun clickHappyAccept(webView: WebView, delay: Long = 3000L) = schedule(Task.HAPPY, webView, delay, "开心收下") { click(webView,"开心收下") }
+    }
+    fun clickHappyAccept(webView: WebView, delay: Long = 3000L) = schedule(Task.HAPPY, webView, delay, "开心收下") { click(webView,"开心收下") }
     fun clickContinue(webView: WebView, delay: Long = 500L) = schedule(Task.CONTINUE, webView, delay, "继续") { click(webView,"继续") }
     fun clickContinuePk(webView: WebView, delay: Long = 2000L) = schedule(Task.CONTINUE_PK, webView, delay, "继续PK") { click(webView,"继续PK") }
 
