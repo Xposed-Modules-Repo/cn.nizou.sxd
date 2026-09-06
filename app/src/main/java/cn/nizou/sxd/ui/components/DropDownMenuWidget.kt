@@ -1,7 +1,10 @@
 package cn.nizou.sxd.ui.components
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenuPopup
@@ -71,17 +74,19 @@ fun <T> DropDownMenuWidget(
                     expanded = expanded,
                     onDismissRequest = { expanded = false },
                 ) {
-                    DropdownMenuGroup(shapes = MenuDefaults.groupShapes()) {
-                        options.forEachIndexed { index, option ->
-                            DropdownMenuItem(
-                                selected = option.value == value,
-                                onClick = {
-                                    onValueChange(option.value)
-                                    expanded = false
-                                },
-                                text = { Text(option.label) },
-                                shapes = MenuDefaults.itemShape(index, options.size),
-                            )
+                    LazyColumn(Modifier.heightIn(max = 440.dp)) {
+                        itemsIndexed(options) { index, option ->
+                            DropdownMenuGroup(shapes = MenuDefaults.groupShapes()) {
+                                DropdownMenuItem(
+                                    selected = option.value == value,
+                                    onClick = {
+                                        onValueChange(option.value)
+                                        expanded = false
+                                    },
+                                    text = { Text(option.label) },
+                                    shapes = MenuDefaults.itemShape(index, options.size),
+                                )
+                            }
                         }
                     }
                 }

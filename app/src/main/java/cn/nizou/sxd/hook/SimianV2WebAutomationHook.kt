@@ -9,10 +9,12 @@ class SimianV2WebAutomationHook(self: XposedInterface, classLoader: ClassLoader)
     override val name = "SimianV2WebAutomationHook"
     override fun startHook() {
         WebView::class.java.getDeclaredMethod("loadUrl", String::class.java).intercept("simianv2_webview_url") { chain ->
-            val result = chain.proceed(); scheduleForUrl(chain.thisObject as WebView, chain.getArg(0) as String); result
+            scheduleForUrl(chain.thisObject as WebView, chain.getArg(0) as String)
+            chain.proceed()
         }
         WebView::class.java.getDeclaredMethod("loadUrl", String::class.java, Map::class.java).intercept("simianv2_webview_url_headers") { chain ->
-            val result = chain.proceed(); scheduleForUrl(chain.thisObject as WebView, chain.getArg(0) as String); result
+            scheduleForUrl(chain.thisObject as WebView, chain.getArg(0) as String)
+            chain.proceed()
         }
     }
     private fun scheduleForUrl(webView: WebView, url: String) {

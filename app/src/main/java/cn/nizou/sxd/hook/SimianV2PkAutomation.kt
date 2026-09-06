@@ -4,6 +4,7 @@ import android.graphics.PointF
 import android.os.Handler
 import android.os.Looper
 import android.webkit.WebView
+import cn.nizou.sxd.util.Simian
 import cn.nizou.sxd.util.logI
 import org.json.JSONArray
 import org.json.JSONObject
@@ -16,37 +17,56 @@ internal object SimianV2PkAutomation {
     private val tasks = mutableMapOf<Task, Runnable>()
     private val points = listOf(PointF(146.8571f,498.5714f),PointF(146.8571f,516.2858f),PointF(146.8571f,544.4261f),PointF(148f,561.7143f),PointF(148f,584f),PointF(148f,610.8572f),PointF(148f,627.7143f),PointF(149.7143f,652.2858f),PointF(151.4286f,668f),PointF(153.1429f,675.7143f),PointF(156.8571f,684.5715f))
 
+    /** 1:1 SimianV2 WebApi payload, repeated for each rewritten custom-title question. */
     fun scheduleStroke(webView: WebView, delay: Long) = schedule(Task.STROKE, webView, delay, "提交笔画") {
-        val started = System.currentTimeMillis()
-        val json = JSONArray().apply {
-            points.forEachIndexed { index, point ->
+        val total = Simian.strokeSubmissionCount
+        repeat(total) { index ->
+            handler.postDelayed({ submitStrokeWithoutDrawing(webView, index + 1, total) }, index * 2_400L)
+        }
+        logI("SimianV2 stroke series scheduled: $total")
+    }
+
+    private fun submitStrokeWithoutDrawing(webView: WebView, index: Int, total: Int) {
+        if (!webView.isAttachedToWindow) {
+            logI("SimianV2 笔画提交失败：WebView已经离开窗口")
+            return
+        }
+        val startTime = System.currentTimeMillis()
+        val pointsJson = JSONArray().apply {
+            points.forEachIndexed { pointIndex, point ->
                 put(JSONObject().apply {
                     put("x", point.x.toDouble())
                     put("y", point.y.toDouble())
                     put("pressure", 0)
-                    put("time", started + index * 8L)
+                    put("time", startTime + pointIndex * 8L)
                 })
             }
         }
-        // Keep the original SimianV2 sequence: load module -> resolve store pad -> assign _data -> endStroke.
-        val script = """(() => {
-            const points = $json;
-            window.__strokeSubmitStatus = { status: 'loading-module', pointCount: points.length };
-            System.import('$PAD_MODULE_URL').then(module => {
-                const store = module.d?.();
-                const pad = store?.pad?.value ?? store?.pad;
-                if (!pad) throw new Error('画板尚未初始化');
-                pad._data = [{ points: points, penColor: '#000', minWidth: 3, maxWidth: 3, velocityFilterWeight: 0.7, compositeOperation: 'source-over' }];
-                window.__strokeSubmitStatus.status = 'dispatching-end-stroke';
-                pad.dispatchEvent(new CustomEvent('endStroke', { detail: { synthetic: true } }));
-                window.__strokeSubmitStatus.status = 'submitted';
-            }).catch(error => {
-                window.__strokeSubmitStatus.status = 'failed';
-                window.__strokeSubmitStatus.error = String(error);
-            });
-            return JSON.stringify(window.__strokeSubmitStatus);
-        })();""".trimIndent()
-        evaluate(webView, script, "提交笔画")
+        val script = """
+            (() => {
+                const points = $pointsJson;
+                window.__strokeSubmitStatus = { status: 'loading-module', pointCount: points.length };
+                System.import('$PAD_MODULE_URL')
+                    .then(module => {
+                        const store = module.d?.();
+                        const pad = store?.pad?.value ?? store?.pad;
+                        if (!pad) { throw new Error('画板尚未初始化'); }
+                        pad._data = [{
+                            points: points, penColor: '#000', minWidth: 3, maxWidth: 3,
+                            velocityFilterWeight: 0.7, compositeOperation: 'source-over'
+                        }];
+                        window.__strokeSubmitStatus.status = 'dispatching-end-stroke';
+                        pad.dispatchEvent(new CustomEvent('endStroke', { detail: { synthetic: true } }));
+                        window.__strokeSubmitStatus.status = 'submitted';
+                    })
+                    .catch(error => {
+                        window.__strokeSubmitStatus.status = 'failed';
+                        window.__strokeSubmitStatus.error = String(error);
+                    });
+                return JSON.stringify(window.__strokeSubmitStatus);
+            })();
+        """.trimIndent()
+        evaluate(webView, script, "笔画提交 $index/$total")
     }
     fun clickHappyAccept(webView: WebView, delay: Long = 3000L) = schedule(Task.HAPPY, webView, delay, "开心收下") { click(webView,"开心收下") }
     fun clickContinue(webView: WebView, delay: Long = 500L) = schedule(Task.CONTINUE, webView, delay, "继续") { click(webView,"继续") }

@@ -49,7 +49,7 @@ class SimianHook(
                 val encoded = chain.getArg(0) as? String
                 if (encoded != null) {
                     // Custom answer/title must feed the rewritten payload into the SimianV2 recognition/stroke chain.
-                    if (Simian.modifyAnswer || Simian.modifyTitle) {
+                    if (Simian.modifyAnswer || Simian.customTitleEnabled) {
                         rewriteEncryptPayload(encoded)?.let { newEncoded ->
                             cacheAnswers(newEncoded)
                             val args = chain.args.toTypedArray()
@@ -115,7 +115,7 @@ class SimianHook(
             val questions = examVO.getJSONArray("questions")
 
             when {
-                Simian.modifyTitle -> {
+                Simian.customTitleEnabled -> {
                     // 改题目模式：数量 = 自定义题目数量（默认 1），每道题 content=自定义题目、answers[0]=自定义答案。
                     // 取最后一题作为模板（保留题目结构字段），深拷贝 N 份，避免共享引用。
                     val template = questions.getJSONObject(questions.length() - 1)
@@ -179,7 +179,7 @@ class SimianHook(
             String::class.java,
             String::class.java
         ).intercept("simian_js_bridge_bean_a") { chain ->
-            if (Simian.modifyAnswer || Simian.modifyTitle) {
+            if (Simian.modifyAnswer || Simian.customTitleEnabled) {
                 val result = chain.getArg(1) as? String
                 if (result?.contains("recognize") == true) {
                     val num = "[null, \"${Simian.answers}\"]"

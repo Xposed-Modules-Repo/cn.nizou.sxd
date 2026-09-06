@@ -49,8 +49,10 @@ private fun frameworkStatus(): String = runCatching {
     val self = companion.getField("self").get(null) ?: return "未检测到注入框架"
     val type = self.javaClass
     val name = type.methods.first { it.name == "getFrameworkName" && it.parameterCount == 0 }.invoke(self)
+    val version = type.methods.first { it.name == "getFrameworkVersion" && it.parameterCount == 0 }.invoke(self)
+    val code = type.methods.first { it.name == "getFrameworkVersionCode" && it.parameterCount == 0 }.invoke(self)
     val api = type.methods.first { it.name == "getApiVersion" && it.parameterCount == 0 }.invoke(self)
-    "$name · API $api（LSPosed / npatch）"
+    "$name $version · code $code · API $api"
 }.getOrDefault("未检测到注入框架（LSPosed / npatch）")
 
 @Composable private fun NukeHome(open: (NukePage) -> Unit) {

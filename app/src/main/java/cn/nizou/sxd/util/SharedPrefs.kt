@@ -163,7 +163,7 @@ object SimianV2AutomationPrefs {
     val autoContinue get() = modulePrefs.getBoolean(CONTINUE, false)
     val autoContinuePk get() = modulePrefs.getBoolean(CONTINUE_PK, false)
     /** Custom answer, custom title, and custom question-count modes require recognition replacement and stroke submission together. */
-    val linkedCustomAnswer get() = Simian.modifyAnswer || Simian.modifyTitle || Simian.customQuestionCount > 0
+    val linkedCustomAnswer get() = Simian.modifyAnswer || Simian.customTitleEnabled || Simian.customQuestionCount > 0
     val effectiveQuickAnswer get() = quickAnswer || linkedCustomAnswer
     val effectiveAutoStroke get() = autoAnswer || linkedCustomAnswer
 }
@@ -194,8 +194,9 @@ object Simian {
     /** 改答案：EncryptResult 多题模式（所有题 answers[0]）改自定义答案 */
     val modifyAnswer get() = modulePrefs.getBoolean(moduleStringRes.KEY_MODIFY_ANSWER, false)
 
-    /** 改题目：EncryptResult 单题模式（只保留最后一题并改 content） */
+    /** 改题目：手动开关或「单题改题目+答案」模式均启用题目改写。 */
     val modifyTitle get() = modulePrefs.getBoolean(moduleStringRes.KEY_MODIFY_TITLE, false)
+    val customTitleEnabled get() = modifyTitle || mode == 1
 
     /** 模式：0=多题改答案，1=单题改题目+答案 */
     val mode: Int
@@ -219,6 +220,14 @@ object Simian {
         get() = runCatching {
             Integer.parseInt(modulePrefs.getString(moduleStringRes.KEY_CUSTOM_QUESTION_COUNT, "")!!)
         }.getOrElse { 0 }
+
+    /** Number of rewritten questions that require one SimianV2 stroke submission each. */
+    val strokeSubmissionCount: Int
+        get() = when {
+            customTitleEnabled -> customQuestionCount.coerceAtLeast(1)
+            modifyAnswer && customQuestionCount > 0 -> customQuestionCount
+            else -> 1
+        }
 
     /**
      * 自定义正确题数（自定义分数新方案，0=全对）。
