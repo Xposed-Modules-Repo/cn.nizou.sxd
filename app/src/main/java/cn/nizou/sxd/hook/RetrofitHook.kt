@@ -6,6 +6,7 @@ import cn.nizou.sxd.util.PK
 import cn.nizou.sxd.util.Packet
 import cn.nizou.sxd.util.PacketTool
 import cn.nizou.sxd.util.PkBundlePatcher
+import cn.nizou.sxd.util.ProvinceRegionPrefs
 import cn.nizou.sxd.util.Practice
 import cn.nizou.sxd.util.SettingsPrefs
 import cn.nizou.sxd.util.UserInfoStore
@@ -115,6 +116,13 @@ class RetrofitHook(
         if (Practice.autoHonor && fullPath.startsWith("/leo-math/android/exams") && method in arrayOf("POST", "PUT")) {
             req = buildIsBackground0(request)
         }
+        // Host-confirmed endpoint: GET /leo-exam/android/paper/list uses provinceId.
+        if (method == "GET" && fullPath == PAPER_LIST_PATH && ProvinceRegionPrefs.enabled) {
+            ProvinceRegionPrefs.selectedProvinceId()?.let { provinceId ->
+                req = buildProvinceId(req, provinceId)
+                logI("province override: " + ProvinceRegionPrefs.selectedName + " -> " + provinceId)
+            }
+        }
 
         // 2) 通用抓包 / 改包（开关默认关；改包失败安全回落放行原请求）
         if (Packet.capture || Packet.rewrite) {
@@ -142,6 +150,14 @@ class RetrofitHook(
                 }
             }
         }.onFailure { logI("pk bundle patch failed: ${it.message}") }
+
+        // 3.75) /paper/selectors returns the live FilterItem{id,name} mapping for provinces.
+        runCatching {
+            if (response != null && fullPath == PAPER_SELECTOR_PATH) {
+                val body = XposedHelpers.callMethod(response, "peekBody", 1024L * 1024L)
+                ProvinceRegionPrefs.captureSelectorMapping(XposedHelpers.callMethod(body, "string") as? String)
+            }
+        }.onFailure { logI("province selector capture failed: " + it.message) }
 
         // 4) 响应抓包（capture 开启才用 peekBody 读，不消费真正的 body 流）
         if (Packet.capture) {
@@ -198,6 +214,15 @@ class RetrofitHook(
             logI("captureRecommendKeypoint failed: ${it.message}")
         }
     }
+    private fun buildProvinceId(request: Any, provinceId: Int): Any {
+        val url = XposedHelpers.callMethod(request, "url")!!
+        val urlBuilder = XposedHelpers.callMethod(url, "newBuilder")!!
+        XposedHelpers.callMethod(urlBuilder, "setQueryParameter", "provinceId", provinceId.toString())
+        val newBuilder = XposedHelpers.callMethod(request, "newBuilder")!!
+        XposedHelpers.callMethod(newBuilder, "url", XposedHelpers.callMethod(urlBuilder, "build")!!)
+        return XposedHelpers.callMethod(newBuilder, "build")!!
+    }
+
     /** 把 exams 请求 query 加 isBackground=0。 */
     private fun buildIsBackground0(request: Any): Any {
         val url = XposedHelpers.callMethod(request, "url")!!
@@ -207,6 +232,11 @@ class RetrofitHook(
         val newBuilder = XposedHelpers.callMethod(request, "newBuilder")!!
         XposedHelpers.callMethod(newBuilder, "url", newUrl)
         return XposedHelpers.callMethod(newBuilder, "build")!!
+    }
+
+    private companion object {
+        const val PAPER_LIST_PATH = "/leo-exam/android/paper/list"
+        const val PAPER_SELECTOR_PATH = "/leo-exam/android/paper/selectors"
     }
 
     /** PK 相关前端 JS bundle（leo-web-oral-pk / leo-web-math-exercise / animation-oral 下的 .js）。 */

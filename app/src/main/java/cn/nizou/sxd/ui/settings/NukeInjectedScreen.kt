@@ -16,6 +16,7 @@ import cn.nizou.sxd.ui.content.nukex.NukeSwitchRow
 import cn.nizou.sxd.ui.theme.SettingsUiEngine
 import cn.nizou.sxd.ui.theme.ThemeSettings
 import cn.nizou.sxd.util.LogOverlayWindow
+import cn.nizou.sxd.util.ProvinceRegionPrefs
 import cn.nizou.sxd.util.SettingsPrefs
 import cn.nizou.sxd.util.SimianV2AutomationPrefs
 
@@ -82,11 +83,20 @@ private fun frameworkStatus(): String = runCatching {
 
 
 @Composable private fun NukeGeneral() {
+    var province by remember { mutableStateOf(ProvinceRegionPrefs.selectedName) }
     var alwaysTrue by remember { mutableStateOf(SettingsPrefs.readBoolean("always_true_answer", true)) }
     var nickname by remember { mutableStateOf(SettingsPrefs.readBoolean("remove_restriction_on_nickname", true)) }
     NukeSettingGroup("通用") {
         NukeSwitchRow("一切输入视为正确答案", "旧识别链路兼容开关", alwaysTrue) { alwaysTrue = it; SettingsPrefs.writeBoolean("always_true_answer", it) }
         NukeSwitchRow("无视名字限制", "放开昵称长度与字符限制", nickname) { nickname = it; SettingsPrefs.writeBoolean("remove_restriction_on_nickname", it) }
+    }
+    NukeSettingGroup("试卷地区 · 当前：" + province) {
+        ProvinceRegionPrefs.provinces.forEach { item ->
+            NukePreferenceRow(item.name, if (item.name == province) "已选中" else null, onClick = {
+                province = item.name
+                ProvinceRegionPrefs.select(item.name)
+            })
+        }
     }
 }
 

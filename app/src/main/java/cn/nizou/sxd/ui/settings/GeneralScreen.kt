@@ -9,10 +9,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import cn.nizou.sxd.ui.components.DropDownMenuWidget
+import cn.nizou.sxd.ui.components.DropdownOption
 import cn.nizou.sxd.ui.components.M3BackButton
 import cn.nizou.sxd.ui.components.M3ListScaffold
 import cn.nizou.sxd.ui.components.SegmentedColumn
 import cn.nizou.sxd.ui.components.SwitchWidget
+import cn.nizou.sxd.util.ProvinceRegionPrefs
 import cn.nizou.sxd.util.SettingsPrefs
 import cn.nizou.sxd.util.StringRes
 
@@ -25,6 +28,7 @@ fun GeneralScreen(res: StringRes, onBack: () -> Unit) {
     var ignoreNicknameRestriction by remember {
         mutableStateOf(SettingsPrefs.readBoolean(res, res.KEY_IGNORE_NICKNAME_RESTRICTION, true))
     }
+    var province by remember { mutableStateOf(ProvinceRegionPrefs.selectedName) }
 
     M3ListScaffold(
         title = "通用",
@@ -49,6 +53,20 @@ fun GeneralScreen(res: StringRes, onBack: () -> Unit) {
                         ignoreNicknameRestriction = it
                         SettingsPrefs.writeBoolean(res, res.KEY_IGNORE_NICKNAME_RESTRICTION, it)
                     }
+                )
+            }
+        }
+        item {
+            SegmentedColumn(title = "试卷地区") {
+                DropDownMenuWidget(
+                    title = "改地区",
+                    description = "改写试卷列表请求的 provinceId；全国表示不改写",
+                    value = province,
+                    options = ProvinceRegionPrefs.provinces.map { DropdownOption(it.name, it.name) },
+                    onValueChange = { selected ->
+                        province = selected
+                        ProvinceRegionPrefs.select(selected)
+                    },
                 )
             }
         }
