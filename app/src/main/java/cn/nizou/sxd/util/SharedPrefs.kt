@@ -168,6 +168,13 @@ object SimianV2AutomationPrefs {
     val effectiveAutoStroke get() = autoAnswer || linkedCustomAnswer
 }
 
+
+/** AutoPK 原生链路（PkNativeSession / RetrofitHook 捕获）开关。默认开。 */
+object PkNativePrefs {
+    const val ENABLED = "pk_native_enabled"
+    val enabled get() = modulePrefs.getBoolean(ENABLED, true)
+}
+
 object Debug {
     val debug
         get() = modulePrefs.getBoolean(moduleStringRes.KEY_DEBUG, false)

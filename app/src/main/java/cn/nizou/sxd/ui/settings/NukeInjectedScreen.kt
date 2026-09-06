@@ -13,9 +13,12 @@ import cn.nizou.sxd.ui.content.nukex.NukePageScaffold
 import cn.nizou.sxd.ui.content.nukex.NukePreferenceRow
 import cn.nizou.sxd.ui.content.nukex.NukeSettingGroup
 import cn.nizou.sxd.ui.content.nukex.NukeSwitchRow
+import cn.nizou.sxd.hook.PkNativeSession
+import cn.nizou.sxd.ui.components.readInjectedLoadingEnvironment
 import cn.nizou.sxd.ui.theme.SettingsUiEngine
 import cn.nizou.sxd.ui.theme.ThemeSettings
 import cn.nizou.sxd.util.LogOverlayWindow
+import cn.nizou.sxd.util.PkNativePrefs
 import cn.nizou.sxd.util.ProvinceRegionPrefs
 import cn.nizou.sxd.util.SettingsPrefs
 import cn.nizou.sxd.util.SimianV2AutomationPrefs
@@ -44,20 +47,13 @@ fun NukeInjectedScreen(onFinish: () -> Unit) {
 
 private enum class NukePage(val title: String) { HOME("老挂戏老叟"), GENERAL("通用"), AUTOMATION("SimianV2 自动化"), CUSTOM("自定义功能"), DEBUG("调试"), APPEARANCE("界面") }
 
-private fun frameworkStatus(): String = runCatching {
-    val companion = Class.forName("cn.nizou.sxd.XposedInit\$Companion")
-    val self = companion.getField("self").get(null) ?: return "未检测到注入框架"
-    val type = self.javaClass
-    val name = type.methods.first { it.name == "getFrameworkName" && it.parameterCount == 0 }.invoke(self)
-    val version = type.methods.first { it.name == "getFrameworkVersion" && it.parameterCount == 0 }.invoke(self)
-    val code = type.methods.first { it.name == "getFrameworkVersionCode" && it.parameterCount == 0 }.invoke(self)
-    val api = type.methods.first { it.name == "getApiVersion" && it.parameterCount == 0 }.invoke(self)
-    "$name $version · code $code · API $api"
-}.getOrDefault("未检测到注入框架（LSPosed / npatch）")
+private fun loadingEnvironmentStatus(): String = readInjectedLoadingEnvironment()?.let { environment ->
+    "当前加载器：${environment.loaderName}\n当前 Hook 桥接：${environment.hookBridgeName}"
+} ?: "未提供"
 
 @Composable private fun NukeHome(open: (NukePage) -> Unit) {
     NukeSettingGroup("模块") {
-        NukePreferenceRow("注入环境", frameworkStatus())
+        NukePreferenceRow("加载环境", loadingEnvironmentStatus())
         NukePreferenceRow("通用", "正确识别与昵称设置", onClick = { open(NukePage.GENERAL) })
         NukePreferenceRow("SimianV2 自动化", "正确答案、自动笔画、开心收下、继续、继续 PK", onClick = { open(NukePage.AUTOMATION) })
         NukePreferenceRow("自定义功能", "答案、题目、结算时间与分数", onClick = { open(NukePage.CUSTOM) })
@@ -72,6 +68,7 @@ private fun frameworkStatus(): String = runCatching {
     var happy by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.HAPPY_ACCEPT, false)) }
     var continueMatch by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.CONTINUE, false)) }
     var continuePk by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.CONTINUE_PK, false)) }
+    var pkNative by remember { mutableStateOf(SettingsPrefs.readBoolean(PkNativePrefs.ENABLED, true)) }
     NukeSettingGroup("答题") {
         NukeSwitchRow("一切输入视为正确答案", "DexKit 定位 SimianV2 识别方法", quick) { quick = it; SettingsPrefs.writeBoolean(SimianV2AutomationPrefs.QUICK_ANSWER, it) }
         NukeSwitchRow("自动提交笔画", "进入 PK 后按 SimianV2 画板链路提交", stroke) { stroke = it; SettingsPrefs.writeBoolean(SimianV2AutomationPrefs.AUTO_ANSWER, it) }
@@ -80,6 +77,11 @@ private fun frameworkStatus(): String = runCatching {
         NukeSwitchRow("自动点击开心收下", null, happy) { happy = it; SettingsPrefs.writeBoolean(SimianV2AutomationPrefs.HAPPY_ACCEPT, it) }
         NukeSwitchRow("自动点击继续", null, continueMatch) { continueMatch = it; SettingsPrefs.writeBoolean(SimianV2AutomationPrefs.CONTINUE, it) }
         NukeSwitchRow("自动点击继续 PK", null, continuePk) { continuePk = it; SettingsPrefs.writeBoolean(SimianV2AutomationPrefs.CONTINUE_PK, it) }
+    }
+    NukeSettingGroup("PK 原生链路 (AutoPK)") {
+        NukeSwitchRow("原生会话跟踪", "捕获 match 的 pkIdStr/题目数 N 驱动笔画", pkNative) { v -> pkNative = v; SettingsPrefs.writeBoolean(PkNativePrefs.ENABLED, v); if (!v) PkNativeSession.reset() }
+        val curPk = PkNativeSession.currentPkId
+        NukePreferenceRow("本局会话", if (curPk != null) "pkIdStr=$curPk · N=${PkNativeSession.nativeQuestionCount}" else "尚未捕获到 PK 对局")
     }
 }
 

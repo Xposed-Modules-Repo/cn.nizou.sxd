@@ -33,6 +33,7 @@ import cn.nizou.sxd.HOST_PACKAGE_NAME
 import cn.nizou.sxd.ui.animation.predictiveback.weKitNavTransition
 import cn.nizou.sxd.ui.components.BaseWidget
 import cn.nizou.sxd.ui.components.HookStatusCard
+import cn.nizou.sxd.ui.components.readInjectedLoadingEnvironment
 import cn.nizou.sxd.ui.components.M3BackButton
 import cn.nizou.sxd.ui.components.UserInfoCard
 import cn.nizou.sxd.ui.components.M3ListScaffold
@@ -351,9 +352,13 @@ private fun deviceInfoEntries(): List<HomeInfoEntry> {
             context.packageManager.getPackageInfo(HOST_PACKAGE_NAME, 0)
         }.getOrNull()
     }
-    val frameworkInfo = remember { readInjectedFrameworkInfo() }
+    val loadingEnvironment = remember { readInjectedLoadingEnvironment() }
     return listOf(
-        HomeInfoEntry("加载环境", frameworkInfo ?: "未检测到框架（独立打开）"),
+        HomeInfoEntry(
+            "加载环境",
+            loadingEnvironment?.let { "当前加载器：${it.loaderName}\n当前 Hook 桥接：${it.hookBridgeName}" }
+                ?: "未提供",
+        ),
         HomeInfoEntry(
             "小猿口算版本",
             hostVersion?.let { "v${it.versionName} (${it.versionCode})" } ?: "未安装",
@@ -370,16 +375,6 @@ private fun deviceInfoEntries(): List<HomeInfoEntry> {
         HomeInfoEntry("安卓版本", "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"),
     )
 }
-
-/** Reads the host-only Xposed module through reflection so launcher bytecode stays standalone-safe. */
-private fun readInjectedFrameworkInfo(): String? = runCatching {
-    val companion = Class.forName("cn.nizou.sxd.XposedInit\$Companion")
-    val self = companion.getField("self").get(null) ?: return null
-    val type = self.javaClass
-    val apiVersion = type.methods.first { it.name == "getApiVersion" && it.parameterCount == 0 }.invoke(self)
-    val frameworkName = type.methods.first { it.name == "getFrameworkName" && it.parameterCount == 0 }.invoke(self)
-    "API $apiVersion · $frameworkName"
-}.getOrNull()
 
 private fun formatBuildTime(epochMillis: Long): String {
     val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())

@@ -4,6 +4,7 @@ import cn.nizou.sxd.Classname
 import cn.nizou.sxd.entities.AutoAnswerMode
 import cn.nizou.sxd.util.PK
 import cn.nizou.sxd.util.Packet
+import cn.nizou.sxd.util.PkNativePrefs
 import cn.nizou.sxd.util.PacketTool
 import cn.nizou.sxd.util.PkBundlePatcher
 import cn.nizou.sxd.util.ProvinceRegionPrefs
@@ -111,9 +112,9 @@ class RetrofitHook(
         val method = XposedHelpers.callMethod(request, "method").toString()
         val fullPath = XposedHelpers.callMethod(httpUrl, "encodedPath")?.toString() ?: "/"
 
-        // AutoPK 原生链路：捕获 PK match 请求 pointId（纯只读，见 PkNativeSession）
+        // AutoPK 原生链路：捕获 PK match 请求 pointId（纯只读，见 PkNativeSession），受 PkNativePrefs 控制
         runCatching {
-            if (fullPath.endsWith("/math/pk/match") && method == "POST") {
+            if (PkNativePrefs.enabled && fullPath.endsWith("/math/pk/match") && method == "POST") {
                 val pointIdQuery = XposedHelpers.callMethod(httpUrl, "queryParameter", "pointId") as? String
                 PkNativeSession.onMatchRequest(pointIdQuery)
             }
@@ -195,9 +196,9 @@ class RetrofitHook(
             // 用户信息采集属可选功能，失败静默，不打扰正常请求
         }
 
-        // AutoPK 原生链路：只读解析 PK match / history/detail 响应（明文 JSON 时才有 pkIdStr）
+        // AutoPK 原生链路：只读解析 PK match / history/detail 响应（明文 JSON 时才有 pkIdStr），受 PkNativePrefs 控制
         runCatching {
-            if (response != null && fullPath.contains("/leo-game-pk/") &&
+            if (PkNativePrefs.enabled && response != null && fullPath.contains("/leo-game-pk/") &&
                 (fullPath.endsWith("/math/pk/match") || fullPath.endsWith("/math/pk/history/detail"))
             ) {
                 val body = XposedHelpers.callMethod(response, "peekBody", 4L * 1024L * 1024L)
