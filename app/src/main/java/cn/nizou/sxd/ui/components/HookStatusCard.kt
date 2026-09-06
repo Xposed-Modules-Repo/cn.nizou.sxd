@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import cn.nizou.sxd.BuildConfig
+import cn.nizou.sxd.util.readInjectedModuleSelf
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Check_circle
 
@@ -102,8 +103,7 @@ data class InjectedLoadingEnvironment(
 
 /** Mirrors WeKit StartupInfo.loaderService + hookBridge for the libxposed entry. */
 fun readInjectedLoadingEnvironment(): InjectedLoadingEnvironment? = runCatching {
-    val companion = Class.forName("cn.nizou.sxd.XposedInit" + '$' + "Companion")
-    val self = companion.getField("self").get(null) ?: return null
+    val self = readInjectedModuleSelf() ?: return null
     val type = self.javaClass
     val frameworkName = type.methods.first { it.name == "getFrameworkName" && it.parameterCount == 0 }.invoke(self)
     val apiVersion = type.methods.first { it.name == "getApiVersion" && it.parameterCount == 0 }.invoke(self)
