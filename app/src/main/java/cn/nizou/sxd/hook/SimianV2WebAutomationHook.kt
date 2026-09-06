@@ -19,8 +19,10 @@ class SimianV2WebAutomationHook(self: XposedInterface, classLoader: ClassLoader)
     }
     private fun scheduleForUrl(webView: WebView, url: String) {
         if (url.startsWith("javascript:")) return
+        val exercisePage = url.contains("leo-web-oral-pk/exercise.html") || url.contains("animation-oral.html")
+        if (!exercisePage) SimianV2PkAutomation.cancelStrokeSession(webView, "WebView navigated: " + url.substringBefore('?'))
         when {
-            url.contains("leo-web-oral-pk/exercise.html") || url.contains("animation-oral.html") -> if (SimianV2AutomationPrefs.effectiveAutoStroke) SimianV2PkAutomation.scheduleStroke(webView, SimianV2AutomationPrefs.autoAnswerDelay)
+            exercisePage -> if (SimianV2AutomationPrefs.effectiveAutoStroke) SimianV2PkAutomation.scheduleStroke(webView, SimianV2AutomationPrefs.autoAnswerDelay)
             url.contains("motivation-honor-roll.html") -> {
                 if (SimianV2AutomationPrefs.autoHappyAccept) SimianV2PkAutomation.clickHappyAccept(webView)
                 if (SimianV2AutomationPrefs.autoContinue) SimianV2PkAutomation.clickContinue(webView)

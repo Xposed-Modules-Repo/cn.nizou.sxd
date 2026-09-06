@@ -111,6 +111,14 @@ class RetrofitHook(
         val method = XposedHelpers.callMethod(request, "method").toString()
         val fullPath = XposedHelpers.callMethod(httpUrl, "encodedPath")?.toString() ?: "/"
 
+        // AutoPK 原生链路：捕获 PK match 请求 pointId（纯只读，见 PkNativeSession）
+        runCatching {
+            if (fullPath.endsWith("/math/pk/match") && method == "POST") {
+                val pointIdQuery = XposedHelpers.callMethod(httpUrl, "queryParameter", "pointId") as? String
+                PkNativeSession.onMatchRequest(pointIdQuery)
+            }
+        }.onFailure { }
+
         // 1) 保持现有 isBackground 逻辑不破坏（自动上分）
         var req: Any = request
         if (Practice.autoHonor && fullPath.startsWith("/leo-math/android/exams") && method in arrayOf("POST", "PUT")) {
@@ -186,6 +194,17 @@ class RetrofitHook(
         }.onFailure {
             // 用户信息采集属可选功能，失败静默，不打扰正常请求
         }
+
+        // AutoPK 原生链路：只读解析 PK match / history/detail 响应（明文 JSON 时才有 pkIdStr）
+        runCatching {
+            if (response != null && fullPath.contains("/leo-game-pk/") &&
+                (fullPath.endsWith("/math/pk/match") || fullPath.endsWith("/math/pk/history/detail"))
+            ) {
+                val body = XposedHelpers.callMethod(response, "peekBody", 4L * 1024L * 1024L)
+                val text = XposedHelpers.callMethod(body, "string") as? String
+                PkNativeSession.onMatchResponse(text)
+            }
+        }.onFailure { error -> logI("AutoPK response parse skipped: " + error.message) }
 
         return response
     }

@@ -15,15 +15,52 @@ internal object SimianV2PkAutomation {
     private enum class Task { STROKE, HAPPY, CONTINUE, CONTINUE_PK }
     private val handler = Handler(Looper.getMainLooper())
     private val tasks = mutableMapOf<Task, Runnable>()
+    private data class StrokeSession(val webView: WebView, val tasks: MutableSet<Runnable> = linkedSetOf())
+    private var strokeSession: StrokeSession? = null
     private val points = listOf(PointF(146.8571f,498.5714f),PointF(146.8571f,516.2858f),PointF(146.8571f,544.4261f),PointF(148f,561.7143f),PointF(148f,584f),PointF(148f,610.8572f),PointF(148f,627.7143f),PointF(149.7143f,652.2858f),PointF(151.4286f,668f),PointF(153.1429f,675.7143f),PointF(156.8571f,684.5715f))
 
-    /** 1:1 SimianV2 WebApi payload, repeated for each rewritten custom-title question. */
-    fun scheduleStroke(webView: WebView, delay: Long) = schedule(Task.STROKE, webView, delay, "提交笔画") {
-        val total = Simian.strokeSubmissionCount
-        repeat(total) { index ->
-            handler.postDelayed({ submitStrokeWithoutDrawing(webView, index + 1, total) }, index * 2_400L)
+    /** One cancellable session owns every delayed stroke for the current exercise page. */
+    fun scheduleStroke(webView: WebView, delay: Long) {
+        // Only one PK exercise may own delayed strokes at a time, even if the host creates a new WebView.
+        strokeSession?.let { active -> cancelStrokeSession(active.webView, "replaced by a new exercise page") }
+        // 每局笔画次数 = 实际题数。模块改写题目集时（改题目/改答案+自定义题数）用改写后的 N；
+        // 否则（纯自动笔画走宿主真实题目）优先用原生 match 捕获的题目数 N（PkNativeSession），兜底配置值。
+        val rewrittenSet = Simian.customTitleEnabled || Simian.modifyAnswer
+        val nativeN = PkNativeSession.nativeQuestionCount
+        val countSource = when { rewrittenSet -> "rewrite"; nativeN > 0 -> "native-match"; else -> "config" }
+        val total = when {
+            rewrittenSet -> Simian.strokeSubmissionCount
+            nativeN > 0 -> nativeN
+            else -> Simian.strokeSubmissionCount
         }
-        logI("SimianV2 stroke series scheduled: $total")
+        val session = StrokeSession(webView)
+        strokeSession = session
+        repeat(total) { index ->
+            lateinit var task: Runnable
+            task = Runnable {
+                if (strokeSession !== session || !session.tasks.remove(task)) return@Runnable
+                if (!webView.isAttachedToWindow) {
+                    logI("SimianV2 笔画提交失败：WebView已经离开窗口")
+                    return@Runnable
+                }
+                submitStrokeWithoutDrawing(webView, index + 1, total)
+                if (session.tasks.isEmpty() && strokeSession === session) strokeSession = null
+            }
+            session.tasks += task
+            handler.postDelayed(task, delay.coerceAtLeast(0L) + index * 2_400L)
+        }
+        logI("SimianV2 stroke session scheduled: $total (source=$countSource)")
+    }
+
+    /** Cancels the complete delayed-stroke sequence for this WebView. */
+    fun cancelStrokeSession(webView: WebView, reason: String) {
+        val session = strokeSession ?: return
+        if (session.webView !== webView) return
+        session.tasks.forEach(handler::removeCallbacks)
+        val cancelled = session.tasks.size
+        session.tasks.clear()
+        strokeSession = null
+        if (cancelled > 0) logI("SimianV2 stroke session cancelled: $cancelled ($reason)")
     }
 
     private fun submitStrokeWithoutDrawing(webView: WebView, index: Int, total: Int) {
