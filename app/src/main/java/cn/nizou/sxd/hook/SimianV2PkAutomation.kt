@@ -91,13 +91,34 @@ internal object SimianV2PkAutomation {
                         const deadline = Date.now() + 4000;
                         const waitForPad = () => {
                             const store = module.d?.();
-                            const pad = store?.pad?.value ?? store?.pad;
+                            // module.d() exposes Vue refs/proxies. Find the real SignaturePad instance K,
+                            // not its wrapper: K owns _data, toData(), and EventTarget dispatchEvent().
+                            const isRealPad = value => value &&
+                                typeof value.dispatchEvent === 'function' &&
+                                typeof value.toData === 'function' &&
+                                ('_data' in value);
+                            const rootPad = store?.pad;
+                            const candidates = [
+                                rootPad, rootPad?.value, rootPad?._value,
+                                rootPad?.value?.value, rootPad?._value?.value,
+                                store?.recognizeBoard?.pad, store?.recognizeBoard?.pad?.value,
+                            ];
+                            const pad = candidates.find(isRealPad);
                             if (!pad) {
+                                state.diagnostic = candidates.map((item, i) => {
+                                    if (!item) return i + ':null';
+                                    let keys = [];
+                                    try { keys = Object.keys(item).slice(0, 8); } catch (_) {}
+                                    return i + ':' + (item.constructor?.name || typeof item) +
+                                        ':dispatch=' + typeof item.dispatchEvent +
+                                        ':toData=' + typeof item.toData +
+                                        ':keys=' + keys.join(',');
+                                }).join('|');
                                 if (Date.now() < deadline) {
                                     state.status = 'waiting-pad';
                                     setTimeout(waitForPad, 100);
                                 } else {
-                                    fail('画板尚未初始化（等待 4000ms）');
+                                    fail('未找到真实画板 K（等待 4000ms）: ' + state.diagnostic);
                                 }
                                 return;
                             }
