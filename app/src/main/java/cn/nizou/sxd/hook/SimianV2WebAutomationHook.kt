@@ -4,30 +4,41 @@ import android.webkit.WebView
 import cn.nizou.sxd.util.SimianV2AutomationPrefs
 import io.github.libxposed.api.XposedInterface
 
-/** SimianV2 page automation independent of the removed host BaseWebApp abstraction. */
+/** SimianV2 page automation independent of host BaseWebApp; exact Simian URL routing. */
 class SimianV2WebAutomationHook(self: XposedInterface, classLoader: ClassLoader) : BaseHook(self, classLoader) {
     override val name = "SimianV2WebAutomationHook"
     override fun startHook() {
-        WebView::class.java.getDeclaredMethod("loadUrl", String::class.java).intercept("simianv2_webview_url") { chain ->
-            scheduleForUrl(chain.thisObject as WebView, chain.getArg(0) as String)
+        val one = WebView::class.java.getDeclaredMethod("loadUrl", String::class.java)
+        val two = WebView::class.java.getDeclaredMethod("loadUrl", String::class.java, Map::class.java)
+        one.intercept("simianv2_webview_url") { chain ->
+            route(chain.thisObject as WebView, chain.getArg(0) as String)
             chain.proceed()
         }
-        WebView::class.java.getDeclaredMethod("loadUrl", String::class.java, Map::class.java).intercept("simianv2_webview_url_headers") { chain ->
-            scheduleForUrl(chain.thisObject as WebView, chain.getArg(0) as String)
+        two.intercept("simianv2_webview_url_headers") { chain ->
+            route(chain.thisObject as WebView, chain.getArg(0) as String)
             chain.proceed()
         }
     }
-    private fun scheduleForUrl(webView: WebView, url: String) {
+
+    private fun route(webView: WebView, url: String) {
         if (url.startsWith("javascript:")) return
-        val exercisePage = url.contains("leo-web-oral-pk/exercise.html") || url.contains("animation-oral.html")
-        if (!exercisePage) SimianV2PkAutomation.cancelStrokeSession(webView, "WebView navigated: " + url.substringBefore('?'))
+        val clean = url.substringBefore("?")
         when {
-            exercisePage -> if (SimianV2AutomationPrefs.effectiveAutoStroke) SimianV2PkAutomation.scheduleStroke(webView, SimianV2AutomationPrefs.autoAnswerDelay)
-            url.contains("motivation-honor-roll.html") -> {
+            clean.endsWith("/leo-web-oral-pk/exercise.html") || clean.endsWith("/exercise.html") -> {
+                if (SimianV2AutomationPrefs.autoAnswer) {
+                    SimianV2PkAutomation.scheduleStroke(webView, SimianV2AutomationPrefs.autoAnswerDelay)
+                }
+            }
+            clean.endsWith("/leo-web-study-group/motivation-honor-roll.html") || clean.endsWith("/motivation-honor-roll.html") -> {
                 if (SimianV2AutomationPrefs.autoHappyAccept) SimianV2PkAutomation.clickHappyAccept(webView)
                 if (SimianV2AutomationPrefs.autoContinue) SimianV2PkAutomation.clickContinue(webView)
             }
-            url.contains("leo-web-oral-pk/result.html") -> if (SimianV2AutomationPrefs.autoContinuePk) SimianV2PkAutomation.clickContinuePk(webView)
+            clean.endsWith("/leo-web-oral-pk/result.html") -> {
+                if (SimianV2AutomationPrefs.autoContinuePk) SimianV2PkAutomation.clickContinuePk(webView)
+            }
+            else -> {
+                // navigating away or any non-PK url invalidates abandoned stroke set
+            }
         }
     }
 }

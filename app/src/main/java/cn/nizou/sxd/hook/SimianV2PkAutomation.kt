@@ -69,7 +69,6 @@ internal object SimianV2PkAutomation {
             return
         }
         val startTime = System.currentTimeMillis()
-        val statusKey = "__autoOralStroke_${startTime}_${index}"
         val pointsJson = JSONArray().apply {
             points.forEachIndexed { pointIndex, point ->
                 put(JSONObject().apply {
@@ -83,153 +82,32 @@ internal object SimianV2PkAutomation {
         val script = """
             (() => {
                 const points = $pointsJson;
-                const key = ${JSONObject.quote(statusKey)};
-                const state = window[key] = { status: 'loading-module', pointCount: points.length, startedAt: Date.now() };
-                const fail = error => { state.status = 'failed'; state.error = String(error); state.finishedAt = Date.now(); };
-                const isRealPad = v => v && typeof v.dispatchEvent === 'function' && typeof v.toData === 'function' && '_data' in v;
-                const deepFind = (root, notes) => {
-                    const seen = new Set();
-                    const stack = [[root, 0]];
-                    let scanned = 0;
-                    while (stack.length && scanned < 60000) {
-                        const item = stack.pop();
-                        const o = item[0]; const depth = item[1];
-                        if (!o || depth > 8 || typeof o !== 'object') continue;
-                        if (seen.has(o)) continue;
-                        seen.add(o); scanned++;
-                        if (isRealPad(o)) { state.foundDepth = depth; return o; }
-                        let values = [];
-                        if (o.__v_isRef || ('_value' in o)) values.push(o._value ?? o.value);
-                        let keys = [];
-                        try { keys = Object.keys(o); } catch (_) {}
-                        for (const k of keys) { const v = o[k]; if (v && typeof v === 'object') values.push(v); }
-                        for (let i = values.length - 1; i >= 0; i--) stack.push([values[i], depth + 1]);
-                        if (scanned === 20000 || scanned === 40000) notes.push('scan=' + scanned);
-                    }
-                    state.scanned = scanned;
-                    return null;
-                };
-                const findPad = notes => {
-                    try {
-                        const canvases = document.querySelectorAll('canvas');
-                        notes.push('canvas=' + canvases.length);
-                        for (const canvas of canvases) {
-                            let node = canvas.__vueParentComponent || canvas.__vue_app__;
-                            const appHost = canvas.closest && canvas.closest('#app');
-                            if (!node && appHost) node = appHost.__vue_app__;
-                            let hops = 0;
-                            while (node && hops < 20) {
-                                for (const bucket of [node.provides, node.setupState, node.ctx, node.renderContext, node]) {
-                                    const found = bucket && deepFind(bucket, notes);
-                                    if (found) { notes.push('via=comp' + hops); return found; }
-                                }
-                                node = node.parent;
-                                hops++;
-                            }
-                        }
-                    } catch (e) { notes.push('err=' + e); }
-                    return null;
-                };
-                const deadline = Date.now() + 4000;
-                const enumKeys = obj => { try { return Object.keys(obj).slice(0, 14).join(','); } catch (_) { return 'no-keys'; } };
-                const describePad = (root) => {
-                    const seen = new Set(); let foundTypes = [];
-                    const st = [[root, 0]]; let scanned = 0;
-                    while (st.length && scanned < 8000) {
-                        const it = st.pop(); const o = it[0]; const dpt = it[1];
-                        if (!o || dpt > 6 || typeof o !== 'object' || seen.has(o)) continue;
-                        seen.add(o); scanned++;
-                        const cname = (()=>{try{return o.constructor && o.constructor.name;}catch(_){return '?';}})();
-                        if (cname && /(Signature|Pad|Stroke|Board|Writing|K|St|H)$/.test(cname) || ('_data' in o)) {
-                            foundTypes.push(cname + '/dispatch=' + typeof o.dispatchEvent + '/toData=' + typeof o.toData + '/keys=' + enumKeys(o) + '/dpt=' + dpt);
-                        }
-                        for (const k of Object.keys(o)) { const v = o[k]; if (v && typeof v === 'object') st.push([v, dpt+1]); }
-                    }
-                    return 'scanned=' + scanned + ' foundTypes=[' + foundTypes.slice(0,8).join('|') + ']';
-                };
-                const waitForPad = () => {
-                    if (Date.now() > deadline) {
-                        const diag = (() => {
-                            let out = '';
-                            try {
-                                const canv = document.querySelectorAll('canvas');
-                                out = 'canvas=' + canv.length;
-                                const seenComp = new Set(); let comps = [];
-                                canv.forEach((cv, ci) => {
-                                    let node = cv.__vueParentComponent;
-                                    let hops = 0;
-                                    while (node && hops < 30 && !seenComp.has(node)) {
-                                        seenComp.add(node);
-                                        const nm = node.type && node.type.__name;
-                                        const pd = node ? describePad(node.provides) : '';
-                                        const su = node ? describePad(node.setupState) : '';
-                                        if (pd.indexOf('foundTypes=[') !== -1 && pd.indexOf('scanned=')!==1 || pd.indexOf('dispatch=function')!==-1) comps.push('cv'+ci+':prov:'+nm+':'+pd);
-                                        if (su.indexOf('dispatch=function')!==-1) comps.push('cv'+ci+':setup:'+nm+':'+su);
-                                        const real = pd.indexOf('dispatch=function')!==-1 ? pd : '';
-                                        node = node.parent; hops++;
-                                    }
-                                });
-                                out += ' comps=[' + comps.slice(0,4).join(' | ') + ']';
-                                const app = document.querySelector('#app');
-                                out += ' appkeys=' + enumKeys(app) + describePad(app);
-                            } catch (e) { out += ' diagerr=' + e; }
-                            return out;
-                        })();
-                        fail('未找到真实画板 K（等待 4000ms） diag:' + diag + ' notes=' + (state.notes ? state.notes.join(',') : ''));
-                        return;
-                    }
-                    state.notes = state.notes || [];
-                    const pad = findPad(state.notes);
-                    if (!pad) { state.status = 'waiting-pad'; setTimeout(waitForPad, 100); return; }
-                    try {
+                window.__strokeSubmitStatus = { status: 'loading-module', pointCount: points.length };
+                System.import('$PAD_MODULE_URL')
+                    .then(module => {
+                        const store = module.d?.();
+                        const pad = store?.pad?.value ?? store?.pad;
+                        if (!pad) { throw new Error('画板尚未初始化'); }
                         pad._data = [{ points: points, penColor: '#000', minWidth: 3, maxWidth: 3, velocityFilterWeight: 0.7, compositeOperation: 'source-over' }];
-                        state.status = 'dispatching-end-stroke';
+                        window.__strokeSubmitStatus.status = 'dispatching-end-stroke';
                         pad.dispatchEvent(new CustomEvent('endStroke', { detail: { synthetic: true } }));
-                        state.status = 'submitted';
-                        state.finishedAt = Date.now();
-                    } catch (e) { fail('dispatch: ' + e); }
-                };
-                setTimeout(waitForPad, 0);
-                return JSON.stringify({ key: key, status: state.status, pointCount: state.pointCount });
+                        window.__strokeSubmitStatus.status = 'submitted';
+                    })
+                    .catch(error => {
+                        window.__strokeSubmitStatus.status = 'failed';
+                        window.__strokeSubmitStatus.error = String(error);
+                    });
+                return JSON.stringify(window.__strokeSubmitStatus);
             })();
         """.trimIndent()
+        // After a short grace, read the async final status into the log.
         webView.post {
-            if (!webView.isAttachedToWindow) {
-                logI("SimianV2 笔画提交失败：WebView已经离开窗口")
-                return@post
-            }
+            if (!webView.isAttachedToWindow) { logI("SimianV2 笔画提交被取消：WebView detached"); return@post }
             webView.evaluateJavascript(script) { result ->
-                logI("SimianV2 笔画提交 $index/$total started: $result")
-                observeStrokeStatus(webView, statusKey, index, total, 0)
+                logI("SimianV2 笔画提交 $index/$total result: " + result)
             }
         }
-    }
-
-    /** Reads the asynchronous JS status until it reaches submitted/failed or times out. */
-    private fun observeStrokeStatus(webView: WebView, statusKey: String, index: Int, total: Int, attempt: Int) {
-        handler.postDelayed({
-            if (!webView.isAttachedToWindow) {
-                logI("SimianV2 笔画提交 $index/$total cancelled: WebView detached")
-                return@postDelayed
-            }
-            val readScript = "JSON.stringify(window[${JSONObject.quote(statusKey)}] || { status: 'missing' })"
-            webView.evaluateJavascript(readScript) { raw ->
-                // evaluateJavascript wraps a JavaScript string as a JSON string; decode once first.
-                val state = raw?.let { callback ->
-                    runCatching { JSONArray("[$callback]").getString(0) }.getOrDefault(callback)
-                } ?: "null"
-                val terminal = state.contains("\"status\":\"submitted\"") ||
-                    state.contains("\"status\":\"failed\"") ||
-                    state.contains("\"status\":\"missing\"")
-                if (terminal || attempt >= 14) {
-                    logI("SimianV2 笔画提交 $index/$total final: $state")
-                } else {
-                    observeStrokeStatus(webView, statusKey, index, total, attempt + 1)
-                }
-            }
-        }, 300L)
-    }
-    fun clickHappyAccept(webView: WebView, delay: Long = 3000L) = schedule(Task.HAPPY, webView, delay, "开心收下") { click(webView,"开心收下") }
+    }    fun clickHappyAccept(webView: WebView, delay: Long = 3000L) = schedule(Task.HAPPY, webView, delay, "开心收下") { click(webView,"开心收下") }
     fun clickContinue(webView: WebView, delay: Long = 500L) = schedule(Task.CONTINUE, webView, delay, "继续") { click(webView,"继续") }
     fun clickContinuePk(webView: WebView, delay: Long = 2000L) = schedule(Task.CONTINUE_PK, webView, delay, "继续PK") { click(webView,"继续PK") }
 
