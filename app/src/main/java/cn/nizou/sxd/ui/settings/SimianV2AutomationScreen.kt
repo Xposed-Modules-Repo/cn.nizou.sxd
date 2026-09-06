@@ -15,6 +15,7 @@ import cn.nizou.sxd.ui.components.M3ListScaffold
 import cn.nizou.sxd.ui.components.SegmentedColumn
 import cn.nizou.sxd.ui.components.SwitchWidget
 import cn.nizou.sxd.ui.components.TextFieldDialogWidget
+import cn.nizou.sxd.util.PkNativePrefs
 import cn.nizou.sxd.util.SettingsPrefs
 import cn.nizou.sxd.util.SimianV2AutomationPrefs
 
@@ -27,6 +28,7 @@ fun SimianV2AutomationScreen(onBack: () -> Unit) {
     var happyAccept by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.HAPPY_ACCEPT, false)) }
     var continueMatch by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.CONTINUE, false)) }
     var continuePk by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.CONTINUE_PK, false)) }
+    var nativeTracking by remember { mutableStateOf(SettingsPrefs.readBoolean(PkNativePrefs.ENABLED, true)) }
 
     M3ListScaffold(title = "SimianV2 自动化", navigationIcon = { M3BackButton(onClick = onBack) }) {
         item {
@@ -55,6 +57,19 @@ fun SimianV2AutomationScreen(onBack: () -> Unit) {
                 SwitchWidget(title = "自动点击开心收下", description = "结算奖励页显示后自动点击", checked = happyAccept, onCheckedChange = { happyAccept = it; SettingsPrefs.writeBoolean(SimianV2AutomationPrefs.HAPPY_ACCEPT, it) })
                 SwitchWidget(title = "自动点击继续", description = "奖励页显示继续按钮后自动点击", checked = continueMatch, onCheckedChange = { continueMatch = it; SettingsPrefs.writeBoolean(SimianV2AutomationPrefs.CONTINUE, it) })
                 SwitchWidget(title = "自动点击继续 PK", description = "PK 结果页显示继续 PK 后自动点击", checked = continuePk, onCheckedChange = { continuePk = it; SettingsPrefs.writeBoolean(SimianV2AutomationPrefs.CONTINUE_PK, it) })
+            }
+        }
+        item {
+            SegmentedColumn(title = "PK 原生链路 (AutoPK)") {
+                SwitchWidget(
+                    title = "原生会话跟踪",
+                    description = "捕获 match 的 pkIdStr 与题目数 N，并按真实题数调度笔画；关闭后回退常规笔画次数",
+                    checked = nativeTracking,
+                    onCheckedChange = { value ->
+                        nativeTracking = value
+                        SettingsPrefs.writeBoolean(PkNativePrefs.ENABLED, value)
+                    },
+                )
             }
         }
         item { Box(Modifier.padding(24.dp)) }

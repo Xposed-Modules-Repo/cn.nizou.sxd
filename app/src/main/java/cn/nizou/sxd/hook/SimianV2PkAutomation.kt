@@ -69,6 +69,7 @@ internal object SimianV2PkAutomation {
             return
         }
         val startTime = System.currentTimeMillis()
+        val statusKey = "__autoOralStroke_${startTime}_${index}"
         val pointsJson = JSONArray().apply {
             points.forEachIndexed { pointIndex, point ->
                 put(JSONObject().apply {
@@ -82,28 +83,74 @@ internal object SimianV2PkAutomation {
         val script = """
             (() => {
                 const points = $pointsJson;
-                window.__strokeSubmitStatus = { status: 'loading-module', pointCount: points.length };
+                const key = ${JSONObject.quote(statusKey)};
+                const state = window[key] = { status: 'loading-module', pointCount: points.length, startedAt: Date.now() };
+                const fail = error => { state.status = 'failed'; state.error = String(error); state.finishedAt = Date.now(); };
                 System.import('$PAD_MODULE_URL')
                     .then(module => {
-                        const store = module.d?.();
-                        const pad = store?.pad?.value ?? store?.pad;
-                        if (!pad) { throw new Error('画板尚未初始化'); }
-                        pad._data = [{
-                            points: points, penColor: '#000', minWidth: 3, maxWidth: 3,
-                            velocityFilterWeight: 0.7, compositeOperation: 'source-over'
-                        }];
-                        window.__strokeSubmitStatus.status = 'dispatching-end-stroke';
-                        pad.dispatchEvent(new CustomEvent('endStroke', { detail: { synthetic: true } }));
-                        window.__strokeSubmitStatus.status = 'submitted';
+                        const deadline = Date.now() + 4000;
+                        const waitForPad = () => {
+                            const store = module.d?.();
+                            const pad = store?.pad?.value ?? store?.pad;
+                            if (!pad) {
+                                if (Date.now() < deadline) {
+                                    state.status = 'waiting-pad';
+                                    setTimeout(waitForPad, 100);
+                                } else {
+                                    fail('画板尚未初始化（等待 4000ms）');
+                                }
+                                return;
+                            }
+                            pad._data = [{
+                                points: points, penColor: '#000', minWidth: 3, maxWidth: 3,
+                                velocityFilterWeight: 0.7, compositeOperation: 'source-over'
+                            }];
+                            state.status = 'dispatching-end-stroke';
+                            pad.dispatchEvent(new CustomEvent('endStroke', { detail: { synthetic: true } }));
+                            state.status = 'submitted';
+                            state.finishedAt = Date.now();
+                        };
+                        waitForPad();
                     })
-                    .catch(error => {
-                        window.__strokeSubmitStatus.status = 'failed';
-                        window.__strokeSubmitStatus.error = String(error);
-                    });
-                return JSON.stringify(window.__strokeSubmitStatus);
+                    .catch(fail);
+                return JSON.stringify({ key: key, status: state.status, pointCount: state.pointCount });
             })();
         """.trimIndent()
-        evaluate(webView, script, "笔画提交 $index/$total")
+        webView.post {
+            if (!webView.isAttachedToWindow) {
+                logI("SimianV2 笔画提交失败：WebView已经离开窗口")
+                return@post
+            }
+            webView.evaluateJavascript(script) { result ->
+                logI("SimianV2 笔画提交 $index/$total started: $result")
+                observeStrokeStatus(webView, statusKey, index, total, 0)
+            }
+        }
+    }
+
+    /** Reads the asynchronous JS status until it reaches submitted/failed or times out. */
+    private fun observeStrokeStatus(webView: WebView, statusKey: String, index: Int, total: Int, attempt: Int) {
+        handler.postDelayed({
+            if (!webView.isAttachedToWindow) {
+                logI("SimianV2 笔画提交 $index/$total cancelled: WebView detached")
+                return@postDelayed
+            }
+            val readScript = "JSON.stringify(window[${JSONObject.quote(statusKey)}] || { status: 'missing' })"
+            webView.evaluateJavascript(readScript) { raw ->
+                // evaluateJavascript wraps a JavaScript string as a JSON string; decode once first.
+                val state = raw?.let { callback ->
+                    runCatching { JSONArray("[$callback]").getString(0) }.getOrDefault(callback)
+                } ?: "null"
+                val terminal = state.contains("\"status\":\"submitted\"") ||
+                    state.contains("\"status\":\"failed\"") ||
+                    state.contains("\"status\":\"missing\"")
+                if (terminal || attempt >= 14) {
+                    logI("SimianV2 笔画提交 $index/$total final: $state")
+                } else {
+                    observeStrokeStatus(webView, statusKey, index, total, attempt + 1)
+                }
+            }
+        }, 300L)
     }
     fun clickHappyAccept(webView: WebView, delay: Long = 3000L) = schedule(Task.HAPPY, webView, delay, "开心收下") { click(webView,"开心收下") }
     fun clickContinue(webView: WebView, delay: Long = 500L) = schedule(Task.CONTINUE, webView, delay, "继续") { click(webView,"继续") }
