@@ -65,7 +65,7 @@ internal object SimianV2PkAutomation {
     private fun submitWithRetry(webView: WebView, index: Int, total: Int, attempt: Int, quick: Boolean) {
         if (!webView.isAttachedToWindow) return
         submitStrokeOnce(webView, index, total) { ok ->
-            if (ok) return
+            if (ok) return@submitStrokeOnce
             val max = if (quick) 500 else SimianV2AutomationPrefs.retryMax.coerceAtLeast(1)
             if (attempt < max) {
                 val rd = (if (quick) 150L else SimianV2AutomationPrefs.retryDelay.coerceAtLeast(0L))
