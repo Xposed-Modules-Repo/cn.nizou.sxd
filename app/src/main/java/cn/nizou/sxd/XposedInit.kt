@@ -66,6 +66,13 @@ class XposedInit : XposedModule() {
         if (param.processName == HOST_PACKAGE_NAME) {
             HookStatus.markLocalActive()
         }
+        // 记录真实运行环境：modules/res in host process stored remotely; UI reads SharedPreferences,
+        // 无需宿主 loader 反射 Class.forName 定位注入类。
+        val envApi = apiVersion; val envFw = frameworkName
+        if (!envFw.isNullOrEmpty()) {
+            try { HookStatus.markEnv(getRemotePreferences(MODULE_PREFS_NAME), envApi, envFw) }
+            catch (_: Throwable) { }
+        }
         log(
             Log.INFO, "AutoOral",
             "event=module_loaded process=${param.processName} api=${apiVersion} framework=${frameworkName}"

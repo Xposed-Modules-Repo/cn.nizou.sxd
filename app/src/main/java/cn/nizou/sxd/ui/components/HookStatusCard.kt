@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import cn.nizou.sxd.BuildConfig
+import cn.nizou.sxd.util.HookStatus
+import cn.nizou.sxd.util.currentApplication
 import cn.nizou.sxd.util.readInjectedModuleSelf
 import com.composables.icons.materialsymbols.MaterialSymbols
 import com.composables.icons.materialsymbols.outlined.Check_circle
@@ -34,7 +36,8 @@ import com.composables.icons.materialsymbols.outlined.Check_circle
 fun HookStatusCard(modifier: Modifier = Modifier) {
     val environment = remember { readInjectedLoadingEnvironment() }
     val contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-    val hookBridgeName = environment?.hookBridgeName ?: "未提供"
+    val fallbackEnv = HookStatus.readEnv(null)
+    val hookBridgeName = environment?.hookBridgeName ?: fallbackEnv ?: "未提供"
 
     Surface(
         modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
