@@ -153,12 +153,14 @@ object SimianV2AutomationPrefs {
     const val QUICK_ANSWER = "simianv2_quick_answer"
     const val AUTO_ANSWER = "simianv2_auto_answer"
     const val AUTO_ANSWER_DELAY = "simianv2_auto_answer_delay"
+    const val SUBMIT_INTERVAL = "simianv2_submit_interval"
     const val HAPPY_ACCEPT = "simianv2_happy_accept"
     const val CONTINUE = "simianv2_continue"
     const val CONTINUE_PK = "simianv2_continue_pk"
     val quickAnswer get() = modulePrefs.getBoolean(QUICK_ANSWER, false)
     val autoAnswer get() = modulePrefs.getBoolean(AUTO_ANSWER, false)
-    val autoAnswerDelay get() = modulePrefs.getString(AUTO_ANSWER_DELAY, "8500")?.toLongOrNull()?.coerceAtLeast(0L) ?: 8500L
+    val autoAnswerDelay get() = modulePrefs.getString(AUTO_ANSWER_DELAY, "10500")?.toLongOrNull()?.coerceAtLeast(0L) ?: 10500L
+    val submitInterval get() = modulePrefs.getString(SUBMIT_INTERVAL, "20")?.toLongOrNull()?.coerceAtLeast(0L) ?: 20L
     val autoHappyAccept get() = modulePrefs.getBoolean(HAPPY_ACCEPT, false)
     val autoContinue get() = modulePrefs.getBoolean(CONTINUE, false)
     val autoContinuePk get() = modulePrefs.getBoolean(CONTINUE_PK, false)

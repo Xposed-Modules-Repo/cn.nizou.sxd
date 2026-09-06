@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.webkit.WebView
 import cn.nizou.sxd.util.Simian
+import cn.nizou.sxd.util.SimianV2AutomationPrefs
 import cn.nizou.sxd.util.logI
 import org.json.JSONArray
 import org.json.JSONObject
@@ -47,7 +48,7 @@ internal object SimianV2PkAutomation {
                 if (session.tasks.isEmpty() && strokeSession === session) strokeSession = null
             }
             session.tasks += task
-            handler.postDelayed(task, delay.coerceAtLeast(0L) + index * 2_400L)
+            handler.postDelayed(task, delay.coerceAtLeast(0L) + index * SimianV2AutomationPrefs.submitInterval.coerceAtLeast(0L))
         }
         logI("SimianV2 stroke session scheduled: $total (source=$countSource)")
     }

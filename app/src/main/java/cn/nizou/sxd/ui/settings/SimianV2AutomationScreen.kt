@@ -24,7 +24,8 @@ import cn.nizou.sxd.util.SimianV2AutomationPrefs
 fun SimianV2AutomationScreen(onBack: () -> Unit) {
     var quickAnswer by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.QUICK_ANSWER, false)) }
     var autoAnswer by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.AUTO_ANSWER, false)) }
-    var delay by remember { mutableStateOf(SettingsPrefs.readString(SimianV2AutomationPrefs.AUTO_ANSWER_DELAY, "8500")) }
+    var firstDelay by remember { mutableStateOf(SettingsPrefs.readString(SimianV2AutomationPrefs.AUTO_ANSWER_DELAY, "10500")) }
+    var submitInterval by remember { mutableStateOf(SettingsPrefs.readString(SimianV2AutomationPrefs.SUBMIT_INTERVAL, "20")) }
     var happyAccept by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.HAPPY_ACCEPT, false)) }
     var continueMatch by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.CONTINUE, false)) }
     var continuePk by remember { mutableStateOf(SettingsPrefs.readBoolean(SimianV2AutomationPrefs.CONTINUE_PK, false)) }
@@ -46,9 +47,14 @@ fun SimianV2AutomationScreen(onBack: () -> Unit) {
                     onCheckedChange = { autoAnswer = it; SettingsPrefs.writeBoolean(SimianV2AutomationPrefs.AUTO_ANSWER, it) },
                 )
                 TextFieldDialogWidget(
-                    title = "自动答题等待", value = delay, placeholder = "单位毫秒，默认 8500", enabled = autoAnswer,
+                    title = "首次提交等待", value = firstDelay, placeholder = "单位毫秒，默认 10500", enabled = autoAnswer,
                     keyboardType = KeyboardType.Number, filter = { value -> value.filter(Char::isDigit) },
-                    onValueChange = { delay = it; SettingsPrefs.writeString(SimianV2AutomationPrefs.AUTO_ANSWER_DELAY, it) },
+                    onValueChange = { firstDelay = it; SettingsPrefs.writeString(SimianV2AutomationPrefs.AUTO_ANSWER_DELAY, it) },
+                )
+                TextFieldDialogWidget(
+                    title = "每次提交间隔", value = submitInterval, placeholder = "单位毫秒，默认 20", enabled = autoAnswer,
+                    keyboardType = KeyboardType.Number, filter = { value -> value.filter(Char::isDigit) },
+                    onValueChange = { submitInterval = it; SettingsPrefs.writeString(SimianV2AutomationPrefs.SUBMIT_INTERVAL, it) },
                 )
             }
         }
